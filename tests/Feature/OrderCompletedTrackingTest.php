@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\UtmifyIntegration;
 use App\Models\User;
 use App\Services\MetaConversionsApiService;
+use App\Listeners\SendMetaPurchaseCapiOnOrderCompleted;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -34,7 +35,7 @@ class OrderCompletedTrackingTest extends TestCase
             'email' => 'track@example.com',
         ]);
 
-        event(new OrderCompleted($order));
+        app(SendMetaPurchaseCapiOnOrderCompleted::class)->handle(new OrderCompleted($order));
 
         Bus::assertDispatched(SendMetaPurchaseCapiJob::class, function (SendMetaPurchaseCapiJob $job) use ($order) {
             return $job->orderId === $order->id;
