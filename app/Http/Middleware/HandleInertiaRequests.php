@@ -6,6 +6,7 @@ use App\Models\MemberNotification;
 use App\Models\MemberPushSubscription;
 use App\Models\PanelNotification;
 use App\Plugins\PluginRegistry;
+use App\Services\RefundService;
 use App\Services\SalesAchievementsService;
 use App\Services\StorageService;
 use App\Services\TeamAccessService;
@@ -91,6 +92,7 @@ class HandleInertiaRequests extends Middleware
 
         $memberNotificationsUnreadCount = 0;
         $memberPushSubscribed = false;
+        $refundEligibility = null;
         if ($user && $isMemberArea) {
             $product = $request->route('product') ?? $request->attributes->get('member_area_product');
             if ($product) {
@@ -101,6 +103,9 @@ class HandleInertiaRequests extends Middleware
                 $memberPushSubscribed = MemberPushSubscription::where('user_id', $user->id)
                     ->where('product_id', $product->id)
                     ->exists();
+                if ($product->type === \App\Models\Product::TYPE_AREA_MEMBROS) {
+                    $refundEligibility = app(RefundService::class)->eligibility($product, $user);
+                }
             }
         }
 
@@ -147,6 +152,7 @@ class HandleInertiaRequests extends Middleware
             'notifications_unread_count' => $notificationsUnreadCount,
             'member_notifications_unread_count' => $memberNotificationsUnreadCount,
             'member_push_subscribed' => $memberPushSubscribed,
+            'refund_eligibility' => $refundEligibility,
         ];
 
         if (! $skipPanelPwa) {
@@ -162,6 +168,7 @@ class HandleInertiaRequests extends Middleware
         $titles = [
             'dashboard' => 'Dashboard',
             'vendas.index' => 'Vendas',
+            'reembolsos.index' => 'Reembolsos',
             'produtos.index' => 'Produtos',
             'produtos.create' => 'Novo produto',
             'produtos.edit' => 'Editar produto',

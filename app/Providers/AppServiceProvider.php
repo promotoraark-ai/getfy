@@ -13,7 +13,9 @@ use App\Listeners\CademiEventSubscriber;
 use App\Listeners\SpedyEventSubscriber;
 use App\Listeners\UtmifyEventSubscriber;
 use App\Listeners\SendApiApplicationWebhookListener;
+use App\Listeners\RevokeAccessOnOrderRefunded;
 use App\Listeners\SendMetaPurchaseCapiOnOrderCompleted;
+use App\Events\OrderRefunded;
 use App\Listeners\WebhookEventSubscriber;
 use App\Support\DockerSetupState;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -155,6 +157,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(OrderCompleted::class, SendMetaPurchaseCapiOnOrderCompleted::class);
         Event::listen(PixGenerated::class, SendPanelPushOnPixGenerated::class);
         Event::listen(BoletoGenerated::class, SendPanelPushOnBoletoGenerated::class);
+        Event::listen(OrderRefunded::class, RevokeAccessOnOrderRefunded::class);
         Event::subscribe(WebhookEventSubscriber::class);
         Event::subscribe(SendApiApplicationWebhookListener::class);
         Event::subscribe(UtmifyEventSubscriber::class);

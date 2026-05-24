@@ -295,6 +295,16 @@ Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'audi
         ->middleware('team.permission:dashboard.view')
         ->name('dashboard');
 
+    Route::middleware('team.permission:reembolsos.view')->group(function () {
+        Route::get('/reembolsos', [\App\Http\Controllers\ReembolsosController::class, 'index'])->name('reembolsos.index');
+        Route::post('/reembolsos/{refundRequest}/approve', [\App\Http\Controllers\ReembolsosController::class, 'approve'])
+            ->middleware('team.permission:reembolsos.manage')
+            ->name('reembolsos.approve');
+        Route::post('/reembolsos/{refundRequest}/reject', [\App\Http\Controllers\ReembolsosController::class, 'reject'])
+            ->middleware('team.permission:reembolsos.manage')
+            ->name('reembolsos.reject');
+    });
+
     Route::middleware('team.permission:vendas.view')->group(function () {
         Route::get('/vendas', [\App\Http\Controllers\VendasController::class, 'index'])->name('vendas.index');
         Route::get('/vendas/export', [\App\Http\Controllers\VendasController::class, 'export'])->name('vendas.export');
@@ -556,6 +566,10 @@ Route::prefix('m/{slug}')->where(['slug' => '[a-zA-Z0-9\-]{3,64}'])->middleware(
         Route::delete('notifications', [\App\Http\Controllers\MemberAreaNotificationsController::class, 'clearAll'])->name('member-area-app.notifications.clear-all');
         Route::put('conta', [\App\Http\Controllers\MemberAreaAccountController::class, 'updateProfile'])->name('member-area-app.conta.update');
         Route::put('conta/senha', [\App\Http\Controllers\MemberAreaAccountController::class, 'updatePassword'])->name('member-area-app.conta.password');
+        Route::get('refund/eligibility', [\App\Http\Controllers\MemberAreaRefundController::class, 'eligibility'])->name('member-area-app.refund.eligibility');
+        Route::post('refund', [\App\Http\Controllers\MemberAreaRefundController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('member-area-app.refund.store');
     });
 });
 
@@ -620,5 +634,9 @@ Route::middleware(['web', 'member.area.resolve.by.host'])->group(function () {
         Route::delete('notifications', [\App\Http\Controllers\MemberAreaNotificationsController::class, 'clearAll'])->name('member-area-app.notifications.clear-all.host');
         Route::put('conta', [\App\Http\Controllers\MemberAreaAccountController::class, 'updateProfile'])->name('member-area-app.conta.update.host');
         Route::put('conta/senha', [\App\Http\Controllers\MemberAreaAccountController::class, 'updatePassword'])->name('member-area-app.conta.password.host');
+        Route::get('refund/eligibility', [\App\Http\Controllers\MemberAreaRefundController::class, 'eligibility'])->name('member-area-app.refund.eligibility.host');
+        Route::post('refund', [\App\Http\Controllers\MemberAreaRefundController::class, 'store'])
+            ->middleware('throttle:10,1')
+            ->name('member-area-app.refund.store.host');
     });
 });

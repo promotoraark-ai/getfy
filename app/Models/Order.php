@@ -66,6 +66,11 @@ class Order extends Model
         return $this->hasOne(CheckoutSession::class);
     }
 
+    public function refundRequest(): HasOne
+    {
+        return $this->hasOne(RefundRequest::class);
+    }
+
     /**
      * Copia utm_* da checkout_sessions vinculada para orders.metadata (painel de vendas / filtros),
      * útil quando o pedido vira "completed" só depois (ex.: webhook) ou se metadata ficou vazio no create.
@@ -268,5 +273,71 @@ class Order extends Model
                 $combo->users()->syncWithoutDetaching([$this->user_id]);
             }
         }
+    }
+
+    /**
+     * Remove buyer access from main product, bumps and combo products (inverse of grantPurchasedProductAccessToBuyer).
+     */
+    public function revokePurchasedProductAccessToBuyer(): void
+    {
+        if (! $this->user_id) {
+            return;
+        }
+
+        $this->loadMissing(
+            'orderItems.product',
+            'product',
+            'subscriptionPlan',
+            'productOffer'
+        );
+
+        $productIds = [];
+        if ($this->product_id) {
+            $productIds[] = $this->product_id;
+        }
+        foreach ($this->orderItems as $item) {
+            if ($item->product_id) {
+                $productIds[] = $item->product_id;
+            }
+        }
+
+        if ($this->subscription_plan_id && $this->subscriptionPlan) {
+            $comboProductIds = $this->subscriptionPlan->combo_product_ids ?? [];
+        } elseif ($this->product_offer_id && $this->productOffer) {
+            $comboProductIds = $this->productOffer->combo_product_ids ?? [];
+        } elseif ($this->product) {
+            $comboProductIds = $this->product->combo_product_ids ?? [];
+        } else {
+            $comboProductIds = [];
+        }
+
+        foreach ($comboProductIds as $comboProductId) {
+            if ($comboProductId && $comboProductId !== $this->product_id) {
+                $productIds[] = $comboProductId;
+            }
+        }
+
+        $productIds = array_values(array_unique(array_filter($productIds)));
+        if ($productIds === []) {
+            return;
+        }
+
+        foreach ($productIds as $productId) {
+            $product = Product::query()->find($productId);
+            if ($product) {
+                $product->users()->detach($this->user_id);
+            }
+        }
+    }
+
+    public function isCajuPayPixPayment(): bool
+    {
+        if ($this->gateway !== 'cajupay') {
+            return false;
+        }
+        $meta = $this->metadata ?? [];
+        $method = strtolower((string) ($meta['checkout_payment_method'] ?? ''));
+
+        return in_array($method, ['pix', 'pix_auto'], true);
     }
 }

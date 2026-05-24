@@ -47,6 +47,8 @@ function isUsersTabActive(href) {
 const permissionDefs = [
     { key: 'dashboard.view', label: 'Dashboard' },
     { key: 'vendas.view', label: 'Vendas' },
+    { key: 'reembolsos.view', label: 'Reembolsos (ver)' },
+    { key: 'reembolsos.manage', label: 'Reembolsos (aprovar/rejeitar)' },
     { key: 'produtos.view', label: 'Produtos' },
     { key: 'relatorios.view', label: 'Relatórios' },
     { key: 'integracoes.view', label: 'Integrações' },

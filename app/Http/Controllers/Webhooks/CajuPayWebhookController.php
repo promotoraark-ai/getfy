@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Jobs\ProcessPaymentWebhook;
 use App\Models\GatewayCredential;
 use App\Models\Order;
+use App\Models\RefundRequest;
+use App\Services\RefundService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -71,6 +73,22 @@ class CajuPayWebhookController extends Controller
                 ->where('gateway_id', $chargeId)
                 ->first();
         }
+        if (! $order && is_string($chargeId) && $chargeId !== '') {
+            $order = Order::where('gateway', self::SLUG)
+                ->where('metadata->cajupay_payment_id', $chargeId)
+                ->first();
+        }
+        if (! $order && is_array($object)) {
+            $clientRefundId = $object['client_refund_id'] ?? null;
+            if (is_string($clientRefundId) && $clientRefundId !== '') {
+                $refundRequest = RefundRequest::query()
+                    ->where('client_refund_id', $clientRefundId)
+                    ->first();
+                if ($refundRequest) {
+                    $order = $refundRequest->order;
+                }
+            }
+        }
 
         if (! $order) {
             Log::debug('CajuPayWebhook: order not found', [
@@ -105,7 +123,12 @@ class CajuPayWebhookController extends Controller
             }
         }
 
+        if (is_string($chargeId) && $chargeId !== '') {
+            app(RefundService::class)->persistCajuPayPaymentId($order, $chargeId);
+        }
+
         $dispatchChargeId = (string) ($chargeId ?: $order->gateway_id ?: $sessionId);
+        $refundId = is_array($object) && is_string($object['refund_id'] ?? null) ? $object['refund_id'] : null;
 
         switch ($eventType) {
             case 'checkout.payment.paid':
@@ -124,9 +147,16 @@ class CajuPayWebhookController extends Controller
                 break;
             case 'checkout.payment.refunded':
             case 'card.payment.refunded':
+            case 'pix.payment.refunded':
+                if ($refundId) {
+                    RefundRequest::query()
+                        ->where('order_id', $order->id)
+                        ->whereIn('status', [RefundRequest::STATUS_PENDING, RefundRequest::STATUS_PROCESSING])
+                        ->update(['cajupay_refund_id' => $refundId]);
+                }
                 ProcessPaymentWebhook::dispatchSync(self::SLUG, $dispatchChargeId, 'order.refunded', 'refunded', array_merge(
                     is_array($payload) ? $payload : [],
-                    ['webhook_source' => 'cajupay_hmac_verified']
+                    ['webhook_source' => 'cajupay_hmac_verified', 'cajupay_refund_id' => $refundId]
                 ));
                 break;
             case 'checkout.payment.disputed':

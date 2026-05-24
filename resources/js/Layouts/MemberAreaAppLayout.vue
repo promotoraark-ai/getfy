@@ -4,7 +4,7 @@ import { Link, usePage, Head, router } from '@inertiajs/vue3';
 import PwaInstallPrompt from '@/components/member-area/PwaInstallPrompt.vue';
 import MemberAreaNotificationsPanel from '@/components/member-area/MemberAreaNotificationsPanel.vue';
 import Button from '@/components/ui/Button.vue';
-import { Bell, ChevronDown, User, X, Camera, Lock, CheckCircle, AlertCircle, Menu, Trophy } from 'lucide-vue-next';
+import { Bell, ChevronDown, User, X, Camera, Lock, CheckCircle, AlertCircle, Menu, Trophy, RotateCcw } from 'lucide-vue-next';
 
 const page = usePage();
 const props = computed(() => page.props);
@@ -119,6 +119,18 @@ const memberNotificationsUnreadCount = ref(props.value?.member_notifications_unr
 const accountMenuOpen = ref(false);
 const accountMenuRef = ref(null);
 const accountModalOpen = ref(false);
+const refundModalOpen = ref(false);
+const refundReason = ref('');
+const refundSubmitting = ref(false);
+const refundError = ref('');
+const refundSuccess = ref('');
+
+const refundEligibility = computed(() => props.value?.refund_eligibility ?? null);
+const showRefundMenu = computed(() => {
+    const e = refundEligibility.value;
+    if (!e?.enabled) return false;
+    return e.can_request || (e.existing_request && ['pending', 'processing'].includes(e.existing_request.status));
+});
 
 const profileName = ref('');
 const profileAvatarFile = ref(null);
@@ -151,6 +163,52 @@ function openAccountModal() {
 
 function closeAccountModal() {
     accountModalOpen.value = false;
+}
+
+function openRefundModal() {
+    accountMenuOpen.value = false;
+    refundReason.value = '';
+    refundError.value = '';
+    refundSuccess.value = '';
+    refundModalOpen.value = true;
+}
+
+function closeRefundModal() {
+    refundModalOpen.value = false;
+}
+
+async function submitRefundRequest() {
+    const reason = refundReason.value.trim();
+    if (reason.length < 10) {
+        refundError.value = 'Descreva o motivo com pelo menos 10 caracteres.';
+        return;
+    }
+    refundSubmitting.value = true;
+    refundError.value = '';
+    try {
+        const res = await fetch(`${basePath.value}/refund`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': page.props.csrf_token ?? '',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ reason }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            refundError.value = data.message || data.errors?.reason?.[0] || 'Não foi possível enviar a solicitação.';
+            return;
+        }
+        refundSuccess.value = data.message || 'Solicitação enviada com sucesso.';
+        router.reload({ preserveScroll: true });
+    } catch {
+        refundError.value = 'Erro de conexão. Tente novamente.';
+    } finally {
+        refundSubmitting.value = false;
+    }
 }
 
 function onProfileAvatarChange(e) {
@@ -647,6 +705,16 @@ watch(
                             <User class="h-4 w-4" />
                             Minha conta
                         </button>
+                        <button
+                            v-if="showRefundMenu"
+                            type="button"
+                            class="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            role="menuitem"
+                            @click="openRefundModal"
+                        >
+                            <RotateCcw class="h-4 w-4" />
+                            {{ refundEligibility?.can_request ? 'Solicitar reembolso' : 'Reembolso em andamento' }}
+                        </button>
                         <Link
                             v-if="certificateEnabled"
                             :href="`${basePath}/certificado`"
@@ -764,6 +832,15 @@ watch(
                             >
                                 <User class="h-4 w-4" />
                                 Minha conta
+                            </button>
+                            <button
+                                v-if="showRefundMenu"
+                                type="button"
+                                class="flex w-full items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium text-zinc-300 hover:bg-zinc-800"
+                                @click="openRefundModal(); closeMobileMenu()"
+                            >
+                                <RotateCcw class="h-4 w-4" />
+                                {{ refundEligibility?.can_request ? 'Solicitar reembolso' : 'Reembolso em andamento' }}
                             </button>
                             <Link
                                 v-if="certificateEnabled"
@@ -977,6 +1054,62 @@ watch(
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+        </Teleport>
+
+        <!-- Modal: solicitar reembolso -->
+        <Teleport to="body">
+            <div
+                v-if="refundModalOpen"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="refund-modal-title"
+                @click.self="closeRefundModal"
+            >
+                <div class="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+                    <div class="mb-4 flex items-center justify-between">
+                        <h2 id="refund-modal-title" class="text-lg font-semibold text-zinc-900 dark:text-white">Solicitar reembolso</h2>
+                        <button type="button" class="rounded-lg p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800" @click="closeRefundModal">
+                            <X class="h-5 w-5" />
+                        </button>
+                    </div>
+                    <template v-if="refundEligibility?.can_request">
+                        <p v-if="refundEligibility.days_remaining != null" class="mb-3 text-sm text-zinc-600 dark:text-zinc-400">
+                            Você tem {{ refundEligibility.days_remaining }} dia(s) restante(s) para solicitar o reembolso.
+                        </p>
+                        <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Motivo da solicitação</label>
+                        <textarea
+                            v-model="refundReason"
+                            rows="5"
+                            maxlength="2000"
+                            class="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100"
+                            placeholder="Descreva o motivo do reembolso (mínimo 10 caracteres)…"
+                        />
+                        <div v-if="refundError" class="mt-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                            <AlertCircle class="h-4 w-4 shrink-0" />
+                            {{ refundError }}
+                        </div>
+                        <div v-if="refundSuccess" class="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                            <CheckCircle class="h-4 w-4 shrink-0" />
+                            {{ refundSuccess }}
+                        </div>
+                        <div class="mt-4 flex gap-2">
+                            <Button type="button" variant="outline" class="flex-1" @click="closeRefundModal">Cancelar</Button>
+                            <Button type="button" class="flex-1" :disabled="refundSubmitting" @click="submitRefundRequest">
+                                {{ refundSubmitting ? 'Enviando…' : 'Enviar solicitação' }}
+                            </Button>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <p class="text-sm text-zinc-600 dark:text-zinc-400">
+                            {{ refundEligibility?.existing_request?.status_label
+                                ? `Sua solicitação está com status: ${refundEligibility.existing_request.status_label}.`
+                                : (refundEligibility?.message || 'Não é possível solicitar reembolso no momento.') }}
+                        </p>
+                        <Button type="button" class="mt-4 w-full" @click="closeRefundModal">Fechar</Button>
+                    </template>
                 </div>
             </div>
         </Teleport>

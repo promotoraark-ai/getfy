@@ -4,6 +4,7 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     LayoutDashboard,
     CircleDollarSign,
+    RotateCcw,
     Package,
     Repeat,
     Users,
@@ -74,6 +75,7 @@ const navItems = computed(() => {
     // Core items com permissões (usuário de equipe)
     if (canView('dashboard.view')) items.push({ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard });
     if (canView('vendas.view')) items.push({ name: 'Vendas', href: '/vendas', icon: CircleDollarSign });
+    if (canView('reembolsos.view')) items.push({ name: 'Reembolsos', href: '/reembolsos', icon: RotateCcw });
     if (canView('produtos.view')) items.push({ name: 'Produtos', href: '/produtos', icon: Package });
     if (canView('relatorios.view')) items.push({ name: 'Relatórios', href: '/relatorios', icon: BarChart3 });
     if (canView('integracoes.view')) items.push({ name: 'Integrações', href: '/integracoes', icon: Cable });

@@ -3,6 +3,8 @@
 namespace App\Gateways\CajuPay;
 
 use App\Gateways\Contracts\GatewayDriver;
+use App\Models\GatewayCredential;
+use App\Models\Order;
 use App\Support\MoneyMinorUnits;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -554,6 +556,7 @@ class CajuPayDriver implements GatewayDriver
                         'checkout.payment.failed',
                         'checkout.payment.refunded',
                         'checkout.payment.disputed',
+                        'pix.payment.refunded',
                         // Eventos card.* usados em alguns fluxos internos / docs CajuPay
                         'card.payment.succeeded',
                         'card.payment.failed',
@@ -657,6 +660,164 @@ class CajuPayDriver implements GatewayDriver
         string $notificationUrl
     ): array {
         throw new \RuntimeException('CajuPay: boleto não está disponível nesta integração.');
+    }
+
+    /**
+     * Resolve CajuPay payment_id (UUID) for refund API.
+     */
+    public function resolvePaymentIdForOrder(Order $order): ?string
+    {
+        if ($order->gateway !== 'cajupay') {
+            return null;
+        }
+
+        $meta = $order->metadata ?? [];
+        $stored = $meta['cajupay_payment_id'] ?? null;
+        if (is_string($stored) && $stored !== '' && $this->looksLikeUuid($stored)) {
+            return $stored;
+        }
+
+        $gatewayId = (string) ($order->gateway_id ?? '');
+        $sessionId = (string) ($meta['cajupay_checkout_session_id'] ?? '');
+        if ($gatewayId !== '' && $this->looksLikeUuid($gatewayId) && $gatewayId !== $sessionId) {
+            return $gatewayId;
+        }
+        if ($gatewayId !== '' && $this->looksLikeUuid($gatewayId) && $sessionId === '') {
+            return $gatewayId;
+        }
+
+        $credential = GatewayCredential::forTenant($order->tenant_id)
+            ->where('gateway_slug', 'cajupay')
+            ->where('is_connected', true)
+            ->first();
+        if (! $credential) {
+            return null;
+        }
+
+        $credentials = $credential->getDecryptedCredentials();
+        if (! $this->hasApiKeys($credentials)) {
+            return null;
+        }
+
+        $lookupIds = array_values(array_unique(array_filter([
+            $gatewayId,
+            $sessionId,
+        ])));
+
+        foreach ($lookupIds as $lookupId) {
+            if ($lookupId === '' || ! $this->looksLikeUuid($lookupId)) {
+                continue;
+            }
+            $resolved = $this->findPaymentIdInList($lookupId, $credentials);
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function findPaymentIdInList(string $transactionId, array $credentials): ?string
+    {
+        try {
+            $response = $this->httpForCredentials($credentials)
+                ->get('/api/payments', ['limit' => 100]);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $list = $response->json();
+            if (! is_array($list)) {
+                return null;
+            }
+
+            foreach ($list as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $pid = $item['payment_id'] ?? null;
+                if (! is_string($pid) || $pid === '') {
+                    continue;
+                }
+                if ($pid === $transactionId) {
+                    return $pid;
+                }
+                $session = $item['checkout_session_id'] ?? null;
+                if (is_string($session) && $session === $transactionId) {
+                    return $pid;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver findPaymentIdInList', ['message' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>
+     */
+    public function createPixRefund(string $paymentId, array $credentials, ?string $clientRefundId = null): array
+    {
+        if (! $this->hasApiKeys($credentials)) {
+            throw new \RuntimeException('CajuPay: configure as chaves de API para reembolso PIX.');
+        }
+
+        $body = [];
+        if ($clientRefundId !== null && $clientRefundId !== '') {
+            $body['client_refund_id'] = $clientRefundId;
+        }
+
+        $response = $this->httpForCredentials($credentials)
+            ->post('/api/payments/'.urlencode($paymentId).'/pix-refund', $body);
+
+        if (! $response->successful()) {
+            $msg = $response->body();
+            if (strlen($msg) > 300) {
+                $msg = substr($msg, 0, 300).'…';
+            }
+            throw new \RuntimeException('CajuPay reembolso: '.($msg !== '' ? $msg : 'Erro ao solicitar reembolso PIX.'));
+        }
+
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new \RuntimeException('CajuPay reembolso: resposta inválida.');
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>|null
+     */
+    public function getPixRefund(string $paymentId, array $credentials): ?array
+    {
+        if (! $this->hasApiKeys($credentials)) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpForCredentials($credentials)
+                ->get('/api/payments/'.urlencode($paymentId).'/pix-refund');
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $data = $response->json();
+
+            return is_array($data) ? $data : null;
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver getPixRefund', ['message' => $e->getMessage()]);
+
+            return null;
+        }
     }
 
     private function normalizeDocument(string $document): string

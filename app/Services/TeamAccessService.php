@@ -79,6 +79,8 @@ class TeamAccessService
         return [
             'dashboard.view' => true,
             'vendas.view' => true,
+            'reembolsos.view' => true,
+            'reembolsos.manage' => true,
             'produtos.view' => true,
             'relatorios.view' => true,
             'integracoes.view' => true,

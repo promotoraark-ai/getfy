@@ -195,7 +195,8 @@ class ProcessPaymentWebhook implements ShouldQueue
             ->where(function ($q) use ($tid) {
                 $q->where('gateway_id', $tid)
                     ->orWhere('metadata->cajupay_checkout_session_id', $tid)
-                    ->orWhere('metadata->cajupay_session_token', $tid);
+                    ->orWhere('metadata->cajupay_session_token', $tid)
+                    ->orWhere('metadata->cajupay_payment_id', $tid);
             })
             ->first();
     }

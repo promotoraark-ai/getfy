@@ -307,6 +307,9 @@ class MemberBuilderController extends Controller
             'member_area_config.login.password_mode' => ['nullable', 'string', 'in:auto,default'],
             'member_area_config.login.default_password' => ['nullable', 'string', 'max:255'],
             'member_area_config.login.login_without_password' => ['nullable', 'boolean'],
+            'member_area_config.refund.enabled' => ['nullable', 'boolean'],
+            'member_area_config.refund.days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'member_area_config.refund.mode' => ['nullable', 'string', 'in:auto,manual'],
             'domain_type' => ['nullable', 'string', 'in:path,custom'],
             'domain_value' => ['nullable', 'string', 'max:255'],
         ]);
@@ -365,6 +368,14 @@ class MemberBuilderController extends Controller
         if (isset($incoming['gamification']['achievements']) && is_array($incoming['gamification']['achievements'])) {
             $config['gamification'] = $config['gamification'] ?? ['enabled' => false, 'achievements' => []];
             $config['gamification']['achievements'] = array_values($incoming['gamification']['achievements']);
+        }
+        if (isset($incoming['refund']) && is_array($incoming['refund'])) {
+            $refund = $incoming['refund'];
+            $config['refund'] = [
+                'enabled' => (bool) ($refund['enabled'] ?? false),
+                'days' => max(1, min(365, (int) ($refund['days'] ?? 7))),
+                'mode' => in_array($refund['mode'] ?? 'manual', ['auto', 'manual'], true) ? $refund['mode'] : 'manual',
+            ];
         }
         $pwa = $config['pwa'] ?? [];
         $vapidWarning = null;

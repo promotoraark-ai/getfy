@@ -607,6 +607,26 @@ class Product extends Model
         return $this->hasMany(ProductOrderBump::class)->orderBy('position');
     }
 
+    /**
+     * @return array{enabled: bool, days: int, mode: string}
+     */
+    public function memberAreaRefundConfig(): array
+    {
+        $refund = ($this->member_area_config ?? [])['refund'] ?? [];
+        $mode = (string) ($refund['mode'] ?? 'manual');
+
+        return [
+            'enabled' => (bool) ($refund['enabled'] ?? false),
+            'days' => max(1, min(365, (int) ($refund['days'] ?? 7))),
+            'mode' => in_array($mode, ['auto', 'manual'], true) ? $mode : 'manual',
+        ];
+    }
+
+    public function refundRequests(): HasMany
+    {
+        return $this->hasMany(RefundRequest::class);
+    }
+
     public function hasMemberAreaAccess(User $user): bool
     {
         // Admin/Infoprodutor do mesmo tenant do produto tem acesso automático à área de membros
