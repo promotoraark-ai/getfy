@@ -1,0 +1,697 @@
+<?php
+
+namespace App\Gateways\CajuPay;
+
+use App\Gateways\Contracts\GatewayDriver;
+use App\Support\MoneyMinorUnits;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+
+class CajuPayDriver implements GatewayDriver
+{
+    private function baseUrl(array $credentials): string
+    {
+        $override = isset($credentials['base_url']) ? trim((string) $credentials['base_url']) : '';
+        if ($override !== '') {
+            return rtrim($override, '/');
+        }
+
+        return rtrim((string) config('services.cajupay.base_url', 'https://api.cajupay.com.br'), '/');
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function httpForCredentials(array $credentials): \Illuminate\Http\Client\PendingRequest
+    {
+        $public = trim((string) ($credentials['public_key'] ?? ''));
+        $secret = trim((string) ($credentials['secret_key'] ?? ''));
+        if ($public === '' || $secret === '') {
+            throw new \RuntimeException('CajuPay: informe a chave pública (X-API-Key) e a chave secreta (X-API-Secret) em Integrações > Gateways.');
+        }
+
+        $base = $this->baseUrl($credentials);
+
+        return Http::acceptJson()
+            ->asJson()
+            ->timeout(25)
+            ->withOptions(['connect_timeout' => 10])
+            ->baseUrl($base)
+            ->withHeaders([
+                'X-API-Key' => $public,
+                'X-API-Secret' => $secret,
+            ]);
+    }
+
+    public function testConnection(array $credentials): bool
+    {
+        if (! $this->hasApiKeys($credentials)) {
+            return false;
+        }
+
+        try {
+            $response = $this->httpForCredentials($credentials)
+                ->get('/api/wallet/balance', ['kind' => 'main']);
+
+            if ($response->successful()) {
+                return true;
+            }
+
+            if ($response->status() === 401 || $response->status() === 403) {
+                return false;
+            }
+
+            return $response->successful();
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver testConnection', ['message' => $e->getMessage()]);
+
+            return false;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function hasApiKeys(array $credentials): bool
+    {
+        return trim((string) ($credentials['public_key'] ?? '')) !== ''
+            && trim((string) ($credentials['secret_key'] ?? '')) !== '';
+    }
+
+    public function createPixPayment(
+        array $credentials,
+        float $amount,
+        array $consumer,
+        string $externalId,
+        string $postbackUrl
+    ): array {
+        unset($postbackUrl);
+        if (! $this->hasApiKeys($credentials)) {
+            throw new \RuntimeException('CajuPay: configure a chave pública e a chave secreta da API (painel CajuPay → API / Chaves).');
+        }
+
+        $amountCents = MoneyMinorUnits::toMinorUnits($amount, 'BRL');
+        if ($amountCents < 1) {
+            throw new \RuntimeException('CajuPay: valor inválido.');
+        }
+
+        $document = $this->normalizeDocument((string) ($consumer['document'] ?? ''));
+        $name = $this->sanitizeName((string) ($consumer['name'] ?? ''));
+        $email = $this->sanitizeEmail((string) ($consumer['email'] ?? ''));
+
+        $idempotencyKey = 'getfy-' . $externalId . '-' . Str::lower(Str::random(8));
+
+        $body = [
+            'amount_cents' => $amountCents,
+            'currency' => 'BRL',
+            'description' => 'Pedido #'.$externalId,
+            'product_ref' => 'order-'.$externalId,
+            'customer_ref' => 'getfy-order-'.$externalId,
+            'consumer' => [
+                'name' => $name,
+                'email' => $email !== '' ? $email : 'cliente@checkout.local',
+                'document' => $document,
+            ],
+        ];
+
+        $response = $this->httpForCredentials($credentials)
+            ->withHeaders(['Idempotency-Key' => Str::limit($idempotencyKey, 200, '')])
+            ->post('/api/payments/pix', $body);
+
+        if (! $response->successful()) {
+            $msg = $response->body();
+            if (strlen($msg) > 300) {
+                $msg = substr($msg, 0, 300).'…';
+            }
+            throw new \RuntimeException('CajuPay: '.($msg !== '' ? $msg : 'Erro ao criar cobrança PIX.'));
+        }
+
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new \RuntimeException('CajuPay: resposta inválida.');
+        }
+
+        $paymentId = $data['payment_id'] ?? '';
+        if (! is_string($paymentId) || $paymentId === '') {
+            throw new \RuntimeException('CajuPay: payment_id ausente na resposta.');
+        }
+
+        $qr = $data['pix_qr_code'] ?? null;
+        $copy = $data['pix_copy_paste'] ?? null;
+
+        return [
+            'transaction_id' => $paymentId,
+            'qrcode' => is_string($qr) ? $qr : null,
+            'copy_paste' => is_string($copy) ? $copy : null,
+            'raw' => $data,
+        ];
+    }
+
+    public function getTransactionStatus(string $transactionId, array $credentials): ?string
+    {
+        if ($transactionId === '') {
+            return null;
+        }
+
+        // SDK session tokens are public and don't need API keys; try them first
+        // when the format suggests a session token (no underscore prefix typical of
+        // payment_id UUIDs and length > 20 chars).
+        if ($this->looksLikeSdkSessionToken($transactionId)) {
+            $sdkStatus = $this->getSdkSessionStatus($transactionId, $credentials);
+            if ($sdkStatus !== null) {
+                return $sdkStatus;
+            }
+        }
+
+        // Pedidos CajuPay guardam checkout_session_id (UUID) em gateway_id. O endpoint
+        // público GET /sdk/public/checkout/sessions/{id} responde por esse id; a heurística
+        // acima evita UUID para não confundir com payment_id — aqui tentamos a sessão
+        // primeiro e, se não for sessão (404 / vazio), caímos em /api/payments.
+        if ($this->looksLikeUuid($transactionId)) {
+            $sdkStatus = $this->getSdkSessionStatus($transactionId, $credentials);
+            if ($sdkStatus !== null) {
+                return $sdkStatus;
+            }
+        }
+
+        if (! $this->hasApiKeys($credentials)) {
+            return null;
+        }
+
+        try {
+            $response = $this->httpForCredentials($credentials)
+                ->get('/api/payments', ['limit' => 100]);
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $list = $response->json();
+            if (! is_array($list)) {
+                return null;
+            }
+
+            foreach ($list as $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $pid = $item['payment_id'] ?? null;
+                if (! is_string($pid) || $pid !== $transactionId) {
+                    continue;
+                }
+
+                return $this->normalizePaymentStatus($item['status'] ?? null);
+            }
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver getTransactionStatus', ['message' => $e->getMessage()]);
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Heuristic: SDK session tokens are long opaque strings (>20 chars) that
+     * we typically pass through. Payment IDs are UUIDs (36 chars with dashes).
+     * To avoid mis-routing valid UUID payment_ids, only treat as SDK token
+     * when the string contains characters outside UUID format OR when length
+     * differs from 36.
+     */
+    private function looksLikeSdkSessionToken(string $value): bool
+    {
+        if (strlen($value) < 20) {
+            return false;
+        }
+        // UUID v4: 8-4-4-4-12 hex with dashes
+        if ($this->looksLikeUuid($value)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function looksLikeUuid(string $value): bool
+    {
+        return (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $value);
+    }
+
+    /**
+     * Public endpoint — no auth needed, uses the session token directly.
+     *
+     * @param  array<string, mixed>  $credentials  Used only to resolve baseUrl override.
+     */
+    public function getSdkSessionStatus(string $token, array $credentials = []): ?string
+    {
+        if ($token === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout(15)
+                ->withOptions(['connect_timeout' => 10])
+                ->baseUrl($this->baseUrl($credentials))
+                ->get('/api/sdk/public/checkout/sessions/'.urlencode($token));
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $data = $response->json();
+            if (! is_array($data)) {
+                return null;
+            }
+
+            $raw = $this->extractPublicSessionStatus($data);
+            $normalized = $this->normalizePaymentStatus($raw);
+            if ($normalized !== null && $normalized !== 'paid' && $normalized !== 'pending' && $normalized !== 'cancelled') {
+                Log::debug('CajuPayDriver getSdkSessionStatus: status não mapeado para paid/pending/cancelled', [
+                    'raw' => $raw,
+                    'normalized' => $normalized,
+                ]);
+            }
+
+            return $normalized;
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver getSdkSessionStatus', ['message' => $e->getMessage()]);
+
+            return null;
+        }
+    }
+
+    /**
+     * Extrai o estado de pagamento do JSON de GET /api/sdk/public/checkout/sessions/{token}.
+     * O contrato pode evoluir (campos no topo vs dentro de payment / latest_charge).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function extractPublicSessionStatus(array $data): mixed
+    {
+        foreach (['status', 'state', 'checkout_status', 'session_status', 'payment_status'] as $key) {
+            if (! array_key_exists($key, $data)) {
+                continue;
+            }
+            $v = $data[$key];
+            if (is_string($v) && trim($v) !== '') {
+                return $v;
+            }
+        }
+
+        foreach (['payment', 'latest_payment', 'charge', 'latest_charge'] as $nest) {
+            $obj = $data[$nest] ?? null;
+            if (! is_array($obj)) {
+                continue;
+            }
+            foreach (['status', 'state'] as $key) {
+                if (! array_key_exists($key, $obj)) {
+                    continue;
+                }
+                $v = $obj[$key];
+                if (is_string($v) && trim($v) !== '') {
+                    return $v;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Lê o array `methods_available` (rota pública, sem auth) da sessão. Esse array
+     * é a interseção entre as flags da sessão (allow_card/allow_boleto/allow_*_pay) e
+     * o que a conta da CajuPay realmente liberou no PSP/admin. Métodos fora dessa lista
+     * causam `method_not_available` no confirm — então a gente filtra do lado de cá.
+     *
+     * @param  array<string, mixed>  $credentials  Usado apenas pra resolver baseUrl override.
+     * @return array<int, string>  Slugs CajuPay (ex.: ['card', 'apple_pay', 'pix']) — pode
+     *                             estar vazio se a sessão não trouxer methods_available.
+     */
+    public function getSessionAvailableMethods(string $token, array $credentials = []): array
+    {
+        if ($token === '') {
+            return [];
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout(15)
+                ->withOptions(['connect_timeout' => 10])
+                ->baseUrl($this->baseUrl($credentials))
+                ->get('/api/sdk/public/checkout/sessions/'.urlencode($token));
+
+            if (! $response->successful()) {
+                return [];
+            }
+
+            $data = $response->json();
+            if (! is_array($data)) {
+                return [];
+            }
+
+            $methods = $data['methods_available'] ?? ($data['available_methods'] ?? []);
+            if (! is_array($methods)) {
+                return [];
+            }
+
+            // Normaliza pra os slugs internos do Getfy. A CajuPay usa 'applepay'/'googlepay'
+            // (sem underscore) no SDK e na API; nosso checkout usa 'apple_pay'/'google_pay'.
+            $normalized = [];
+            foreach ($methods as $m) {
+                $slug = strtolower(trim((string) $m));
+                if ($slug === 'applepay') $slug = 'apple_pay';
+                if ($slug === 'googlepay') $slug = 'google_pay';
+                if (in_array($slug, ['card', 'boleto', 'pix', 'apple_pay', 'google_pay'], true)) {
+                    $normalized[] = $slug;
+                }
+            }
+
+            return array_values(array_unique($normalized));
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver getSessionAvailableMethods', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Create an SDK checkout session on CajuPay (server-side, with API keys).
+     *
+     * @param  array<string, mixed>  $credentials
+     * @param  array<string, mixed>  $consumer  Optional initial payer info.
+     * @param  array<int, string>  $allowedMethods  Subset of ['card','apple_pay','google_pay','pix'].
+     * @return array{token: string, checkout_session_id: string, raw: array<string, mixed>}
+     */
+    public function createSdkCheckoutSession(
+        array $credentials,
+        int $amountCents,
+        string $currency,
+        string $description,
+        string $externalId,
+        array $consumer,
+        array $allowedMethods,
+        string $defaultMethod
+    ): array {
+        if (! $this->hasApiKeys($credentials)) {
+            throw new \RuntimeException('CajuPay: configure a chave pública e a chave secreta da API (painel CajuPay → API / Chaves).');
+        }
+
+        if ($amountCents < 1) {
+            throw new \RuntimeException('CajuPay: valor inválido.');
+        }
+
+        $currencyCode = MoneyMinorUnits::normalizeCurrencyCode($currency);
+        if (in_array('pix', $allowedMethods, true) && $currencyCode !== 'BRL') {
+            throw new \RuntimeException('CajuPay: PIX só pode ser cobrado em BRL.');
+        }
+
+        $body = [
+            'amount_cents' => $amountCents,
+            'currency' => $currencyCode,
+            'description' => $description !== '' ? $description : ('Pedido #'.$externalId),
+            'allow_card' => in_array('card', $allowedMethods, true),
+            'allow_boleto' => in_array('boleto', $allowedMethods, true),
+            'allow_pix' => in_array('pix', $allowedMethods, true),
+            'allow_apple_pay' => in_array('apple_pay', $allowedMethods, true),
+            'allow_google_pay' => in_array('google_pay', $allowedMethods, true),
+            'metadata' => [
+                'external_id' => $externalId,
+                'source' => 'getfy',
+            ],
+        ];
+
+        // initial_payer só é enviado quando temos dados REAIS do cliente. A CajuPay
+        // não casa esses dados com o que vai no confirm — o /confirm lê payer_name /
+        // payer_email / payer_document do payload do POST público (controller.confirm
+        // do SDK), e o initial_payer da sessão é apenas um pré-preenchimento opcional.
+        // Mandar placeholder ("Cliente") só polui o pré-preenchimento e nem entra em
+        // produção. Confirmado pelo time CajuPay (docs-cajupay.md, Q&A).
+        $rawName = trim((string) ($consumer['name'] ?? ''));
+        $email = $this->sanitizeEmail((string) ($consumer['email'] ?? ''));
+        $document = $this->normalizeDocument((string) ($consumer['document'] ?? ''));
+
+        $payer = array_filter([
+            'name' => $rawName !== '' ? $this->sanitizeName($rawName) : null,
+            'email' => $email !== '' ? $email : null,
+            'document' => $document !== '' && $document !== '00000000000' ? $document : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if (! empty($payer)) {
+            $body['initial_payer'] = $payer;
+        }
+
+        if ($defaultMethod !== '') {
+            $body['default_method'] = $defaultMethod;
+        }
+
+        $idempotencyKey = 'getfy-sdk-'.$externalId.'-'.Str::lower(Str::random(8));
+
+        $response = $this->httpForCredentials($credentials)
+            ->withHeaders(['Idempotency-Key' => Str::limit($idempotencyKey, 200, '')])
+            ->post('/api/sdk/v1/checkout/sessions', $body);
+
+        if (! $response->successful()) {
+            $msg = $response->body();
+            if (strlen($msg) > 300) {
+                $msg = substr($msg, 0, 300).'…';
+            }
+            throw new \RuntimeException('CajuPay: '.($msg !== '' ? $msg : 'Erro ao criar sessão de checkout.'));
+        }
+
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new \RuntimeException('CajuPay: resposta inválida ao criar sessão.');
+        }
+
+        $token = $data['token'] ?? null;
+        $sessionId = $data['checkout_session_id'] ?? ($data['id'] ?? null);
+
+        if (! is_string($token) || $token === '') {
+            throw new \RuntimeException('CajuPay: token ausente na resposta da sessão.');
+        }
+        if (! is_string($sessionId) || $sessionId === '') {
+            throw new \RuntimeException('CajuPay: checkout_session_id ausente na resposta da sessão.');
+        }
+
+        return [
+            'token' => $token,
+            'checkout_session_id' => $sessionId,
+            'raw' => $data,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<int, array<string, mixed>>
+     */
+    public function listWebhookEndpoints(array $credentials): array
+    {
+        if (! $this->hasApiKeys($credentials)) {
+            return [];
+        }
+
+        try {
+            $response = $this->httpForCredentials($credentials)
+                ->get('/api/webhooks/endpoints');
+
+            if (! $response->successful()) {
+                return [];
+            }
+
+            $data = $response->json();
+            if (! is_array($data)) {
+                return [];
+            }
+
+            // Backend may return { items: [...] } or array directly.
+            if (isset($data['items']) && is_array($data['items'])) {
+                $data = $data['items'];
+            }
+
+            return array_values(array_filter($data, static fn ($it) => is_array($it)));
+        } catch (\Throwable $e) {
+            Log::debug('CajuPayDriver listWebhookEndpoints', ['message' => $e->getMessage()]);
+
+            return [];
+        }
+    }
+
+    /**
+     * Register or rotate-secret a webhook endpoint on CajuPay.
+     *
+     * When $existingId is provided, performs PATCH with rotate_secret to
+     * obtain a fresh signing_secret for an already-registered URL.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array{endpoint_id: string, signing_secret: string|null, raw: array<string, mixed>}
+     */
+    public function registerWebhookEndpoint(array $credentials, string $url, ?string $existingId = null): array
+    {
+        if (! $this->hasApiKeys($credentials)) {
+            throw new \RuntimeException('CajuPay: configure as chaves de API antes de registrar o webhook.');
+        }
+        if ($url === '') {
+            throw new \RuntimeException('CajuPay: URL do webhook vazia.');
+        }
+
+        $http = $this->httpForCredentials($credentials);
+
+        try {
+            if ($existingId !== null && $existingId !== '') {
+                $response = $http->patch('/api/webhooks/endpoints', [
+                    'id' => $existingId,
+                    'url' => $url,
+                    'enabled' => true,
+                    'rotate_secret' => true,
+                ]);
+            } else {
+                $response = $http->post('/api/webhooks/endpoints', [
+                    'url' => $url,
+                    'description' => 'Getfy ('.parse_url($url, PHP_URL_HOST).')',
+                    'event_types' => [
+                        'checkout.payment.paid',
+                        'checkout.payment.failed',
+                        'checkout.payment.refunded',
+                        'checkout.payment.disputed',
+                        // Eventos card.* usados em alguns fluxos internos / docs CajuPay
+                        'card.payment.succeeded',
+                        'card.payment.failed',
+                        'card.payment.refunded',
+                        'card.payment.disputed',
+                    ],
+                ]);
+            }
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('CajuPay: falha ao contatar o registro de webhooks: '.$e->getMessage(), 0, $e);
+        }
+
+        if (! $response->successful()) {
+            $msg = $response->body();
+            if (strlen($msg) > 300) {
+                $msg = substr($msg, 0, 300).'…';
+            }
+            throw new \RuntimeException('CajuPay: '.($msg !== '' ? $msg : 'Erro ao registrar webhook.'));
+        }
+
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new \RuntimeException('CajuPay: resposta inválida ao registrar webhook.');
+        }
+
+        $endpointId = $data['id'] ?? ($existingId ?? null);
+        $signingSecret = $data['signing_secret'] ?? null;
+
+        if (! is_string($endpointId) || $endpointId === '') {
+            throw new \RuntimeException('CajuPay: endpoint_id ausente na resposta de webhook.');
+        }
+
+        return [
+            'endpoint_id' => $endpointId,
+            'signing_secret' => is_string($signingSecret) && $signingSecret !== '' ? $signingSecret : null,
+            'raw' => $data,
+        ];
+    }
+
+    private function normalizePaymentStatus(mixed $status): ?string
+    {
+        if (! is_string($status) || trim($status) === '') {
+            return null;
+        }
+        $s = strtolower(trim($status));
+        // Estados terminais de sucesso (PSP/Stripe-like + nomes internos possíveis)
+        if (in_array($s, [
+            'paid',
+            'completed',
+            'complete',
+            'settled',
+            'approved',
+            'confirmado',
+            'confirmed',
+            'success',
+            'successful',
+            'succeeded',
+            'done',
+            'captured',
+            'capture_succeeded',
+            'charge_succeeded',
+            'payment_succeeded',
+            'payment_completed',
+            'checkout_completed',
+            'authorized',
+            'authorised',
+            'paid_out',
+            'pago',
+            'aprovado',
+        ], true)) {
+            return 'paid';
+        }
+        if (in_array($s, ['pending', 'processing', 'waiting', 'requires_action', 'requires_payment_method', 'open'], true)) {
+            return 'pending';
+        }
+        if (in_array($s, ['cancelled', 'canceled', 'expired', 'failed', 'refunded', 'rejected', 'refused'], true)) {
+            return 'cancelled';
+        }
+
+        return $s;
+    }
+
+    public function createCardPayment(
+        array $credentials,
+        float $amount,
+        array $consumer,
+        string $externalId,
+        array $card
+    ): array {
+        // CajuPay card flow runs through the embedded SDK on the checkout page
+        // (see CheckoutController::cajupaySession). It is not invoked through
+        // PaymentService server-side card path.
+        throw new \RuntimeException('CajuPay: cartão é processado via SDK no checkout (use o fluxo embedded).');
+    }
+
+    public function createBoletoPayment(
+        array $credentials,
+        float $amount,
+        array $consumer,
+        string $externalId,
+        string $notificationUrl
+    ): array {
+        throw new \RuntimeException('CajuPay: boleto não está disponível nesta integração.');
+    }
+
+    private function normalizeDocument(string $document): string
+    {
+        $digits = preg_replace('/\D/', '', $document);
+        $digits = is_string($digits) ? $digits : '';
+
+        if (strlen($digits) === 11 || strlen($digits) === 14) {
+            return $digits;
+        }
+
+        return '00000000000';
+    }
+
+    private function sanitizeName(string $name): string
+    {
+        $name = trim($name);
+        $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?: '';
+        $name = trim($name);
+        if ($name === '') {
+            return 'Cliente';
+        }
+        if (strlen($name) > 120) {
+            return substr($name, 0, 120);
+        }
+
+        return $name;
+    }
+
+    private function sanitizeEmail(string $email): string
+    {
+        $email = trim($email);
+        $email = preg_replace('/[\x00-\x1F\x7F]/u', '', $email) ?: '';
+        $email = trim($email);
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+}

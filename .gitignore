@@ -1,0 +1,32 @@
+*.log
+.DS_Store
+.env
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.fleet
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+# Plugins instalados pelo painel / ZIP (persistente; não versionar)
+/plugins-installed
+/storage/app/plugins-installed
+.docker/plugins-installed
+/public/hot
+/public/storage
+/public/.install
+/storage/app/install.lock
+/storage/*.key
+/storage/pail
+Homestead.json
+Homestead.yaml
+Thumbs.db
+/docs
+/Docs Gateways
+docs
+Docs Gateways
