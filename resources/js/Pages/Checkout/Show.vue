@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { AlertCircle, CheckCircle2 } from 'lucide-vue-next';
 import { useCheckoutLocale } from '@/composables/useCheckoutLocale';
 import { useCheckoutCustomCode } from '@/composables/useCheckoutCustomCode';
@@ -18,6 +18,7 @@ import { firePurchaseWhenReady } from '@/composables/useConversionPurchase';
 
 defineOptions({ layout: null });
 
+const page = usePage();
 const PREVIEW_MESSAGE_TYPE = 'checkout-builder-preview-config';
 
 const props = defineProps({
@@ -220,7 +221,11 @@ const lcpPreloadImageUrl = computed(() => {
     }
     return url;
 });
-const faviconHref = computed(() => seo.value.favicon || '/favicon.ico');
+const faviconHref = computed(() => {
+    const custom = seo.value.favicon?.trim();
+    if (custom) return custom;
+    return page.props.public_branding?.favicon_url || '/favicon.ico';
+});
 
 const productImageUrlForNotification = computed(() => {
     const url = props.product?.image_url;

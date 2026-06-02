@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, watch, watchEffect, provide } from 'vue';
-import { usePage } from '@inertiajs/vue3';
+import { usePage, Head } from '@inertiajs/vue3';
 import { useSidebarProvider } from '@/composables/useSidebar';
 import { usePanelPushSubscribe } from '@/composables/usePanelPushSubscribe';
 import AppSidebar from '@/components/layout/AppSidebar.vue';
@@ -15,6 +15,7 @@ import CloudBillingBanner from '@/components/layout/CloudBillingBanner.vue';
 const { isExpanded } = useSidebarProvider();
 usePanelPushSubscribe();
 const page = usePage();
+const faviconHref = computed(() => page.props.public_branding?.favicon_url ?? null);
 const pageTitle = computed(() => page.props.pageTitle ?? null);
 const pageTitleBadge = computed(() => page.props.pageTitleBadge ?? null);
 const contentMaxWidth = computed(() => (page.props.layoutFullWidth ? 'max-w-[1600px]' : 'max-w-7xl'));
@@ -44,6 +45,10 @@ watchEffect(() => {
 </script>
 
 <template>
+    <Head v-if="faviconHref">
+        <link rel="icon" :href="faviconHref" type="image/png" sizes="32x32" />
+        <link rel="shortcut icon" :href="faviconHref" type="image/png" />
+    </Head>
     <div class="min-h-screen bg-zinc-100 dark:bg-zinc-900">
         <AppSidebar />
         <slot name="sidebar-after-nav" />

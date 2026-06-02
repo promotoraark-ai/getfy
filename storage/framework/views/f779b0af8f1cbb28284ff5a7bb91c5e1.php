@@ -28,6 +28,10 @@
             <meta property="og:url" content="<?php echo e(e($openGraph['url'])); ?>">
             <link rel="canonical" href="<?php echo e(e($openGraph['url'])); ?>">
         <?php endif; ?>
+        <?php if(!empty($openGraph['favicon'])): ?>
+            <link rel="icon" href="<?php echo e(e($openGraph['favicon'])); ?>" type="image/png" sizes="32x32">
+            <link rel="shortcut icon" href="<?php echo e(e($openGraph['favicon'])); ?>" type="image/png">
+        <?php endif; ?>
         <?php if(!empty($openGraph['image'])): ?>
             <meta property="og:image" content="<?php echo e(e($openGraph['image'])); ?>">
             <meta property="og:image:secure_url" content="<?php echo e(e($openGraph['image'])); ?>">

@@ -34,6 +34,13 @@ class CheckoutOpenGraph
             $request
         );
 
+        $favicon = trim((string) ($seo['favicon'] ?? ''));
+        if ($favicon === '') {
+            $favicon = BrandFavicon::publicUrl();
+        } else {
+            $favicon = self::absoluteUrl($favicon, $request) ?? BrandFavicon::publicUrl();
+        }
+
         return [
             'title' => $title,
             'description' => $description,
@@ -41,6 +48,7 @@ class CheckoutOpenGraph
             'url' => $request->url(),
             'type' => 'website',
             'site_name' => (string) config('getfy.app_name', config('app.name', 'Getfy')),
+            'favicon' => $favicon,
         ];
     }
 

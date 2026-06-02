@@ -28,6 +28,10 @@
             <meta property="og:url" content="{{ e($openGraph['url']) }}">
             <link rel="canonical" href="{{ e($openGraph['url']) }}">
         @endif
+        @if(!empty($openGraph['favicon']))
+            <link rel="icon" href="{{ e($openGraph['favicon']) }}" type="image/png" sizes="32x32">
+            <link rel="shortcut icon" href="{{ e($openGraph['favicon']) }}" type="image/png">
+        @endif
         @if(!empty($openGraph['image']))
             <meta property="og:image" content="{{ e($openGraph['image']) }}">
             <meta property="og:image:secure_url" content="{{ e($openGraph['image']) }}">

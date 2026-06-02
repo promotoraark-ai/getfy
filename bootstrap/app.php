@@ -35,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\EnsureDockerSetup::class,
             \App\Http\Middleware\EnsureInstalled::class,
         ], append: [
+            \App\Http\Middleware\ApplyWhiteLabelBranding::class,
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\PreventCacheForHtml::class,
             \App\Http\Middleware\SecurityHeaders::class,
