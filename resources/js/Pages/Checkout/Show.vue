@@ -24,6 +24,7 @@ const props = defineProps({
     product: { type: Object, required: true },
     config: { type: Object, default: () => ({}) },
     checkout_session_token: { type: String, default: '' },
+    affiliate_ref: { type: String, default: '' },
     available_payment_methods: { type: Array, default: () => [] },
     flash: { type: Object, default: () => ({}) },
     exit_popup_coupon: { type: Object, default: null },
@@ -408,9 +409,13 @@ const hasCustomBodyEnd = computed(() => String(customBodyEndHtml.value).trim() !
     <Head>
         <title>{{ pageTitle }}</title>
         <meta v-if="pageDescription" name="description" :content="pageDescription" />
+        <meta property="og:type" content="website" />
         <meta property="og:title" :content="pageTitle" />
         <meta v-if="pageDescription" property="og:description" :content="pageDescription" />
         <meta v-if="ogImage" property="og:image" :content="ogImage" />
+        <meta v-if="ogImage" property="og:image:secure_url" :content="ogImage" />
+        <meta v-if="ogImage" name="twitter:card" content="summary_large_image" />
+        <meta v-if="ogImage" name="twitter:image" :content="ogImage" />
         <link
             v-if="lcpPreloadImageUrl"
             rel="preload"
@@ -506,6 +511,7 @@ const hasCustomBodyEnd = computed(() => String(customBodyEndHtml.value).trim() !
                             :product-offer-id="product.product_offer_id ?? null"
                             :subscription-plan-id="product.subscription_plan_id ?? null"
                             :checkout-session-token="checkout_session_token || ''"
+                            :affiliate-ref="affiliate_ref || ''"
                             :order-bumps="order_bumps || []"
                             v-model:order-bump-ids="selectedOrderBumpIds"
                             :primary-color="primaryColor"
@@ -514,6 +520,7 @@ const hasCustomBodyEnd = computed(() => String(customBodyEndHtml.value).trim() !
                             :prefill-coupon="exitPopupAcceptedCoupon"
                             :t="t"
                             :display-currency="displayCurrency"
+                            :checkout-locale="locale"
                             :format-price="formatPrice"
                             :suggested-country-code="props.suggested_country_code"
                             :locale-storage-key="storageKey"

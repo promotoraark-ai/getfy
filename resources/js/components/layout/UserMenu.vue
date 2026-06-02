@@ -46,7 +46,7 @@ onUnmounted(() => {
     <div v-if="user" ref="dropdownRef" class="relative">
         <button
             type="button"
-            class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-200/60 dark:hover:bg-zinc-700/50"
+            class="flex items-center gap-2 rounded-full border border-zinc-200/50 bg-white/50 px-1 py-1 text-left text-sm transition-colors hover:bg-zinc-100 dark:border-zinc-800/60 dark:bg-zinc-900/60 dark:hover:bg-[#0f0f13]"
             @click.prevent="toggleDropdown"
         >
             <span

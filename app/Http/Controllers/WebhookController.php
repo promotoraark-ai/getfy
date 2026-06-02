@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Webhook;
 use App\Models\WebhookLog;
+use App\Support\WebhookPayloadBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -168,27 +169,10 @@ class WebhookController extends Controller
         $eventSlugs = config('webhook_events.event_slugs', []);
         $eventSlug = $eventSlugs[$eventClass] ?? str_replace('\\', '.', $eventClass);
 
-        $payload = [
-            'test' => true,
-            'message' => 'Este é um evento de teste disparado manualmente.',
+        $payload = WebhookPayloadBuilder::sampleTestPayload($eventSlug, [
             'webhook_name' => $webhook->name,
             'webhook_id' => $webhook->id,
-            'customer' => [
-                'name' => 'Cliente Exemplo',
-                'email' => 'exemplo@email.com',
-                'phone' => '11999999999',
-                'cpf' => '12345678900',
-            ],
-            'checkout_link' => rtrim(config('app.url'), '/') . '/c/exemplo-checkout',
-        ];
-
-        if ($eventSlug === 'pix_gerado') {
-            $payload['pix'] = [
-                'qrcode' => 'data:image/png;base64,iVBORw0KGgo=',
-                'copy_paste' => '00020126580014br.gov.bcb.pix...',
-                'transaction_id' => 'txid-exemplo-teste',
-            ];
-        }
+        ]);
 
         $body = [
             'event' => $eventSlug,

@@ -13,27 +13,53 @@
         (function(){try{var s=localStorage.getItem('theme');var t=s||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(_){}})();
     </script>
     <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
-    <title><?php echo e(config('getfy.app_name', config('app.name', 'Getfy'))); ?></title>
+    <?php if(!empty($openGraph) && is_array($openGraph)): ?>
+        <title><?php echo e(e($openGraph['title'] ?? config('getfy.app_name', config('app.name', 'Getfy')))); ?></title>
+        <?php if(!empty($openGraph['description'])): ?>
+            <meta name="description" content="<?php echo e(e($openGraph['description'])); ?>">
+        <?php endif; ?>
+        <meta property="og:type" content="<?php echo e(e($openGraph['type'] ?? 'website')); ?>">
+        <meta property="og:site_name" content="<?php echo e(e($openGraph['site_name'] ?? config('getfy.app_name', config('app.name', 'Getfy')))); ?>">
+        <meta property="og:title" content="<?php echo e(e($openGraph['title'] ?? '')); ?>">
+        <?php if(!empty($openGraph['description'])): ?>
+            <meta property="og:description" content="<?php echo e(e($openGraph['description'])); ?>">
+        <?php endif; ?>
+        <?php if(!empty($openGraph['url'])): ?>
+            <meta property="og:url" content="<?php echo e(e($openGraph['url'])); ?>">
+            <link rel="canonical" href="<?php echo e(e($openGraph['url'])); ?>">
+        <?php endif; ?>
+        <?php if(!empty($openGraph['image'])): ?>
+            <meta property="og:image" content="<?php echo e(e($openGraph['image'])); ?>">
+            <meta property="og:image:secure_url" content="<?php echo e(e($openGraph['image'])); ?>">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" content="<?php echo e(e($openGraph['title'] ?? '')); ?>">
+            <?php if(!empty($openGraph['description'])): ?>
+                <meta name="twitter:description" content="<?php echo e(e($openGraph['description'])); ?>">
+            <?php endif; ?>
+            <meta name="twitter:image" content="<?php echo e(e($openGraph['image'])); ?>">
+        <?php endif; ?>
+    <?php else: ?>
+        <title><?php echo e(config('getfy.app_name', config('app.name', 'Getfy'))); ?></title>
+    <?php endif; ?>
     <?php if (! ($skipPanelPwa)): ?>
     <?php
-        $wlFavicon = config('getfy.favicon_url');
-        $wlFavicon = ($wlFavicon !== null && $wlFavicon !== '') ? $wlFavicon : 'https://cdn.getfy.cloud/collapsed-logo.png';
+        $wlFavicon = \App\Support\BrandFavicon::publicUrl();
         $wlThemeColor = config('getfy.pwa_theme_color');
         $wlThemeColor = ($wlThemeColor !== null && $wlThemeColor !== '') ? $wlThemeColor : config('getfy.theme_primary', '#0ea5e9');
-        $wlAppleIcon = config('getfy.pwa_icon_192');
+        $pwaIconPath = config('getfy.pwa_icon') ?: config('getfy.pwa_icon_192');
+        $wlAppleIcon = (is_string($pwaIconPath) && $pwaIconPath !== '' && is_file(public_path(ltrim($pwaIconPath, '/'))))
+            ? url('/'.ltrim($pwaIconPath, '/'))
+            : null;
     ?>
-    <link rel="icon" href="<?php echo e($wlFavicon); ?>" type="image/png">
+    <link rel="icon" href="<?php echo e($wlFavicon); ?>" type="image/png" sizes="32x32">
+    <link rel="shortcut icon" href="<?php echo e($wlFavicon); ?>" type="image/png">
     <link rel="manifest" href="<?php echo e(url('/manifest.json')); ?>">
     <meta name="theme-color" content="<?php echo e($wlThemeColor); ?>">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <?php if($wlAppleIcon !== null && $wlAppleIcon !== ''): ?>
+    <?php if($wlAppleIcon): ?>
     <link rel="apple-touch-icon" href="<?php echo e($wlAppleIcon); ?>">
-    <?php elseif(is_file(public_path('icons/icon-192x192.png'))): ?>
-    <link rel="apple-touch-icon" href="<?php echo e(url('/icons/icon-192x192.png')); ?>">
-    <?php elseif(is_file(public_path('icons/icon-512x512.png'))): ?>
-    <link rel="apple-touch-icon" href="<?php echo e(url('/icons/icon-512x512.png')); ?>">
     <?php endif; ?>
     <script>
         (function(){var e=null;window.addEventListener('beforeinstallprompt',function(t){t.preventDefault();e=t;window.__pwaInstallPrompt=e;},{capture:true});Object.defineProperty(window,'__pwaInstallPrompt',{get:function(){return e;},set:function(t){e=t;}});})();

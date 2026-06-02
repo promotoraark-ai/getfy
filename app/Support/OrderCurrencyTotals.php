@@ -3,9 +3,8 @@
 namespace App\Support;
 
 use App\Models\Order;
-use App\Models\OrderItem;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class OrderCurrencyTotals
 {
@@ -17,34 +16,29 @@ class OrderCurrencyTotals
      */
     public static function valorPorMoedaFromQuery(Builder $statsQuery): array
     {
-        $completedIds = (clone $statsQuery)
-            ->where('status', 'completed')
-            ->select('orders.id');
+        $hasCurrencyColumn = Schema::hasTable('orders') && Schema::hasColumn('orders', 'currency');
 
-        $currencyExpr = "COALESCE(NULLIF(orders.currency, ''), 'BRL')";
+        $columns = ['orders.id', 'orders.amount', 'orders.status'];
+        if ($hasCurrencyColumn) {
+            $columns[] = 'orders.currency';
+        }
 
-        $fromItems = OrderItem::query()
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->whereIn('order_items.order_id', $completedIds)
-            ->selectRaw("{$currencyExpr} as currency, SUM(order_items.amount) as total")
-            ->groupBy(DB::raw($currencyExpr))
-            ->pluck('total', 'currency');
+        $orders = (clone $statsQuery)
+            ->where('orders.status', 'completed')
+            ->with(['orderItems:id,order_id,amount'])
+            ->get($columns);
 
-        $fromOrdersWithoutItems = (clone $statsQuery)
-            ->where('status', 'completed')
-            ->whereDoesntHave('orderItems')
-            ->selectRaw("{$currencyExpr} as currency, SUM(orders.amount) as total")
-            ->groupBy(DB::raw($currencyExpr))
-            ->pluck('total', 'currency');
+        if ($orders->isEmpty()) {
+            return [];
+        }
 
         $merged = [];
-        foreach ($fromItems as $currency => $total) {
-            $code = MoneyMinorUnits::normalizeCurrencyCode((string) $currency);
-            $merged[$code] = ($merged[$code] ?? 0.0) + (float) $total;
-        }
-        foreach ($fromOrdersWithoutItems as $currency => $total) {
-            $code = MoneyMinorUnits::normalizeCurrencyCode((string) $currency);
-            $merged[$code] = ($merged[$code] ?? 0.0) + (float) $total;
+        foreach ($orders as $order) {
+            $code = $hasCurrencyColumn
+                ? MoneyMinorUnits::normalizeCurrencyCode($order->getCurrencyOrDefault())
+                : 'BRL';
+            $amount = $order->lineItemsTotalAmount();
+            $merged[$code] = ($merged[$code] ?? 0.0) + $amount;
         }
 
         ksort($merged);

@@ -1,21 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
-import {
-    SelectContent,
-    SelectItem,
-    SelectItemIndicator,
-    SelectItemText,
-    SelectPortal,
-    SelectRoot,
-    SelectTrigger,
-    SelectValue,
-    SelectViewport,
-} from 'radix-vue';
 import VueApexCharts from 'vue3-apexcharts';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
-import { CircleDollarSign, ShoppingCart, CreditCard, ShoppingBag, RotateCcw, Package, Eye, EyeOff, ChevronDown, Check } from 'lucide-vue-next';
+import DashboardPeriodFilter from '@/components/dashboard/DashboardPeriodFilter.vue';
+import { CircleDollarSign, ShoppingCart, CreditCard, ShoppingBag, RotateCcw, Package, Eye, EyeOff } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutInfoprodutor });
 
@@ -44,15 +34,6 @@ const props = defineProps({
     quantidade_produtos: { type: Number, default: 0 },
     grafico_vendas: { type: Array, default: () => [] },
 });
-
-const periodOptions = [
-    { value: 'hoje', label: 'Hoje' },
-    { value: 'ontem', label: 'Ontem' },
-    { value: '7dias', label: '7 dias' },
-    { value: 'mes', label: 'Mês' },
-    { value: 'ano', label: 'Ano' },
-    { value: 'total', label: 'Total' },
-];
 
 function setPeriod(value) {
     router.get('/dashboard', { period: value }, { preserveState: false });
@@ -89,28 +70,58 @@ const chartSeries = computed(() => [
     },
 ]);
 
-const chartOptions = computed(() => ({
+/** Apex não aplica var(--color-primary) nos dataLabels; precisa do hex real. */
+const chartPrimaryColor = computed(() => {
+    const fromSettings = page.props.appSettings?.theme_primary;
+    if (typeof fromSettings === 'string' && fromSettings.trim() !== '') {
+        return fromSettings.trim();
+    }
+    if (typeof document !== 'undefined') {
+        const css = getComputedStyle(document.documentElement).getPropertyValue('--color-primary').trim();
+        if (css) {
+            return css;
+        }
+    }
+    return '#0ea5e9';
+});
+
+const chartOptions = computed(() => {
+    const primary = chartPrimaryColor.value;
+
+    return {
     chart: {
         type: 'area',
         toolbar: { show: false },
         zoom: { enabled: false },
         fontFamily: 'inherit',
         animations: { enabled: true, speed: 600 },
+        dropShadow: {
+            enabled: true,
+            top: 4,
+            left: 0,
+            blur: 10,
+            color: primary,
+            opacity: 0.35,
+        },
     },
-    colors: ['var(--color-primary)'],
+    colors: [primary],
     dataLabels: {
         enabled: true,
-        formatter: (v) => (valuesVisible.value ? formatBRL(v) : ''),
-        style: { fontSize: '11px' },
+        formatter: (v) => (valuesVisible.value && v > 0 ? formatBRL(v) : ''),
+        style: {
+            fontSize: '11px',
+            colors: [primary],
+        },
         offsetY: -4,
     },
-    stroke: { curve: 'smooth', width: 2.5 },
+    stroke: { curve: 'smooth', width: 3 },
     fill: {
         type: 'gradient',
         gradient: {
-            shadeIntensity: 0.3,
-            opacityFrom: 0.5,
-            opacityTo: 0.08,
+            shadeIntensity: 1,
+            opacityFrom: 0.6,
+            opacityTo: 0.0,
+            stops: [0, 100]
         },
     },
     markers: {
@@ -136,7 +147,7 @@ const chartOptions = computed(() => ({
         },
     },
     grid: {
-        borderColor: 'var(--chart-grid, #e4e4e7)',
+        borderColor: isDarkMode.value ? '#27272a' : '#e4e4e7',
         strokeDashArray: 4,
         xaxis: { lines: { show: false } },
         yaxis: { lines: { show: true } },
@@ -153,7 +164,8 @@ const chartOptions = computed(() => ({
     crosshairs: {
         stroke: { width: 1, dashArray: 4 },
     },
-}));
+};
+});
 </script>
 
 <template>
@@ -163,90 +175,33 @@ const chartOptions = computed(() => ({
             <ConquistasWidget variant="dashboard" />
         </div>
 
-        <!-- Barra de período + olho -->
-        <div class="flex flex-wrap items-center justify-between gap-3">
-            <!-- Mobile: dropdown + olho ao lado -->
-            <div class="flex items-center gap-2 lg:hidden">
-                <SelectRoot :model-value="period" @update:model-value="setPeriod">
-                    <SelectTrigger
-                        type="button"
-                        aria-label="Período"
-                        class="flex h-10 w-[240px] shrink-0 cursor-pointer items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-left text-sm transition hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:ring-offset-0 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-500"
-                    >
-                        <SelectValue placeholder="Período" />
-                        <ChevronDown class="h-4 w-4 shrink-0 text-zinc-400 dark:text-zinc-500" aria-hidden="true" />
-                    </SelectTrigger>
-                    <SelectPortal to="body">
-                        <SelectContent
-                            class="z-[9999] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-600 dark:bg-zinc-800"
-                            :side-offset="4"
-                            position="popper"
-                            :avoid-collisions="true"
-                        >
-                            <SelectViewport class="p-1">
-                                <SelectItem
-                                    v-for="opt in periodOptions"
-                                    :key="opt.value"
-                                    :value="opt.value"
-                                    class="relative flex cursor-pointer select-none items-center rounded-lg py-2.5 pl-10 pr-4 text-sm outline-none transition data-[highlighted]:bg-[var(--color-primary)]/10 data-[highlighted]:text-[var(--color-primary)] data-[state=checked]:bg-[var(--color-primary)]/10 data-[state=checked]:text-[var(--color-primary)] dark:data-[highlighted]:bg-[var(--color-primary)]/20 dark:data-[state=checked]:bg-[var(--color-primary)]/20"
-                                >
-                                    <SelectItemIndicator class="absolute left-3 flex h-4 w-4 items-center justify-center">
-                                        <Check class="h-4 w-4 text-[var(--color-primary)]" />
-                                    </SelectItemIndicator>
-                                    <SelectItemText>{{ opt.label }}</SelectItemText>
-                                </SelectItem>
-                            </SelectViewport>
-                        </SelectContent>
-                    </SelectPortal>
-                </SelectRoot>
+        <!-- Filtro de período + olho -->
+        <DashboardPeriodFilter :model-value="period" @update:model-value="setPeriod">
+            <template #trailing>
                 <button
                     type="button"
                     :aria-label="valuesVisible ? 'Ocultar valores' : 'Mostrar valores'"
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 transition-colors hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-zinc-200"
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-200/80 bg-zinc-100/90 text-zinc-500 transition-colors hover:text-zinc-800 dark:border-zinc-700/80 dark:bg-zinc-800/50 dark:text-zinc-400 dark:hover:text-zinc-200"
                     @click="valuesVisible = !valuesVisible"
                 >
                     <Eye v-if="valuesVisible" class="h-5 w-5" aria-hidden="true" />
                     <EyeOff v-else class="h-5 w-5" aria-hidden="true" />
                 </button>
-            </div>
-            <!-- Desktop: abas -->
-            <nav class="hidden flex-wrap items-center gap-1 lg:flex" aria-label="Período">
-                <button
-                    v-for="opt in periodOptions"
-                    :key="opt.value"
-                    type="button"
-                    :aria-current="period === opt.value ? 'true' : undefined"
-                    class="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                    :class="period === opt.value
-                        ? 'bg-[var(--color-primary)] text-white'
-                        : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200'"
-                    @click="setPeriod(opt.value)"
-                >
-                    {{ opt.label }}
-                </button>
-            </nav>
-            <!-- Desktop: olho -->
-            <button
-                type="button"
-                :aria-label="valuesVisible ? 'Ocultar valores' : 'Mostrar valores'"
-                class="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200 lg:flex"
-                @click="valuesVisible = !valuesVisible"
-            >
-                <Eye v-if="valuesVisible" class="h-5 w-5" aria-hidden="true" />
-                <EyeOff v-else class="h-5 w-5" aria-hidden="true" />
-            </button>
-        </div>
+            </template>
+        </DashboardPeriodFilter>
 
         <!-- Cards de destaque -->
         <div class="grid gap-4 sm:grid-cols-2">
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
-                <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                    <CircleDollarSign class="h-5 w-5" />
-                    <span class="text-sm font-medium">Vendas totais</span>
+                <div class="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
+                    <div class="dash-metric-icon-md" aria-hidden="true">
+                        <CircleDollarSign class="h-5 w-5" />
+                    </div>
+                    <span class="text-sm font-medium dark:text-zinc-300">Vendas totais</span>
                 </div>
-                <div v-if="(vendas_totais_por_moeda ?? []).length" class="mt-2 space-y-1">
+                <div v-if="(vendas_totais_por_moeda ?? []).length" class="mt-3 space-y-1">
                     <p
                         v-for="row in vendas_totais_por_moeda"
                         :key="row.currency"
@@ -255,7 +210,7 @@ const chartOptions = computed(() => ({
                         {{ displayMoney(row.total, row.currency) }}
                     </p>
                 </div>
-                <p v-else class="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
+                <p v-else class="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">
                     {{ displayMoney(0, 'BRL') }}
                 </p>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -263,13 +218,15 @@ const chartOptions = computed(() => ({
                 </p>
             </div>
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
-                <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                    <ShoppingCart class="h-5 w-5" />
-                    <span class="text-sm font-medium">Quantidade de vendas</span>
+                <div class="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
+                    <div class="dash-metric-icon-md" aria-hidden="true">
+                        <ShoppingCart class="h-5 w-5" />
+                    </div>
+                    <span class="text-sm font-medium dark:text-zinc-300">Quantidade de vendas</span>
                 </div>
-                <p class="mt-2 text-2xl font-bold text-zinc-900 dark:text-white">
+                <p class="mt-3 text-2xl font-bold text-zinc-900 dark:text-white">
                     {{ displayNumber(quantidade_vendas) }}
                 </p>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -281,67 +238,113 @@ const chartOptions = computed(() => ({
         <!-- Formas de pagamento + lateral -->
         <div class="grid gap-4 lg:grid-cols-3">
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 lg:col-span-2"
+                class="panel-card-md lg:col-span-2 flex flex-col"
             >
                 <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
-                    <CreditCard class="h-4 w-4 text-zinc-500" />
+                    <div class="dash-metric-icon-sm" aria-hidden="true">
+                        <CreditCard class="h-4 w-4" />
+                    </div>
                     Formas de pagamento
                 </h2>
-                <ul class="mt-4 space-y-3">
-                    <li
-                        v-for="fp in formas_pagamento"
-                        :key="fp.metodo"
-                        class="flex items-center justify-between border-b border-zinc-200/60 py-2 last:border-0 dark:border-zinc-700/60"
-                    >
-                        <span class="text-sm text-zinc-700 dark:text-zinc-300">{{ fp.label }}</span>
-                        <span class="text-sm font-medium text-zinc-900 dark:text-white">
-                            {{ displayCurrency(fp.total) }}
-                            <span class="font-normal text-zinc-500">({{ displayNumber(fp.quantidade) }})</span>
-                        </span>
-                    </li>
-                    <li v-if="!formas_pagamento.length" class="py-4 text-center text-sm text-zinc-500">
-                        Nenhum pagamento no período
-                    </li>
-                </ul>
-                <div class="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-700">
-                    <p class="text-sm text-zinc-500 dark:text-zinc-400">Taxa de conversão geral</p>
-                    <p class="text-xl font-semibold text-zinc-900 dark:text-white">
-                        {{ valuesVisible ? `${taxa_conversao}%` : '—' }}
-                    </p>
+                <div class="flex flex-1 flex-col md:flex-row md:items-center mt-4">
+                    <div class="flex-1">
+                        <ul class="space-y-3">
+                            <li
+                                v-for="fp in formas_pagamento"
+                                :key="fp.metodo"
+                                class="flex items-center justify-between border-b border-zinc-200/60 py-2 last:border-0 dark:border-zinc-700/60"
+                            >
+                                <span class="text-sm text-zinc-700 dark:text-zinc-300">{{ fp.label }}</span>
+                                <span class="text-sm font-medium text-zinc-900 dark:text-white">
+                                    {{ displayCurrency(fp.total) }}
+                                    <span class="font-normal text-zinc-500">({{ displayNumber(fp.quantidade) }})</span>
+                                </span>
+                            </li>
+                            <li v-if="!formas_pagamento.length" class="py-4 text-center text-sm text-zinc-500">
+                                Nenhum pagamento no período
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <!-- SVG Anel de Conversão -->
+                    <div class="mt-6 flex flex-col items-center justify-center border-t border-zinc-200 pt-6 dark:border-zinc-700/60 md:ml-8 md:mt-0 md:border-l md:border-zinc-200 md:border-t-0 md:pl-8 md:pt-0">
+                        <div class="relative flex h-32 w-32 items-center justify-center">
+                            <!-- Fundo do anel -->
+                            <svg class="h-full w-full -rotate-90 transform" viewBox="0 0 100 100">
+                                <circle
+                                    cx="50"
+                                    cy="50"
+                                    r="40"
+                                    fill="transparent"
+                                    stroke="currentColor"
+                                    stroke-width="12"
+                                    class="text-zinc-200 dark:text-zinc-800"
+                                />
+                                <!-- Progresso -->
+                                <circle
+                                    cx="50"
+                                    cy="50"
+                                    r="40"
+                                    fill="transparent"
+                                    stroke="currentColor"
+                                    stroke-width="12"
+                                    stroke-linecap="round"
+                                    class="text-[var(--color-primary)]"
+                                    :stroke-dasharray="251.2"
+                                    :stroke-dashoffset="251.2 - (251.2 * taxa_conversao) / 100"
+                                    style="transition: stroke-dashoffset 0.8s ease-out;"
+                                />
+                            </svg>
+                            <div class="absolute flex flex-col items-center text-center">
+                                <span class="text-2xl font-bold text-zinc-900 dark:text-white">
+                                    {{ valuesVisible ? `${taxa_conversao}%` : '—' }}
+                                </span>
+                            </div>
+                        </div>
+                        <p class="mt-3 text-sm font-medium text-zinc-500 dark:text-zinc-400">Taxa de conversão geral</p>
+                    </div>
                 </div>
             </div>
             <div class="space-y-4">
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-sm"
                 >
-                    <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <ShoppingBag class="h-4 w-4" />
-                        <span class="text-sm font-medium">Abandono de carrinho</span>
+                    <div class="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
+                        <div class="dash-metric-icon-sm" aria-hidden="true">
+                            <ShoppingBag class="h-4 w-4" />
+                        </div>
+                        <span class="text-sm font-medium dark:text-zinc-300">Abandono de carrinho</span>
                     </div>
-                    <p class="mt-2 text-lg font-bold text-zinc-900 dark:text-white">
+                    <p class="mt-3 text-xl font-bold text-zinc-900 dark:text-white">
                         {{ displayNumber(abandono_carrinho) }}
                     </p>
                 </div>
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-sm"
                 >
-                    <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <RotateCcw class="h-4 w-4" />
-                        <span class="text-sm font-medium">Reembolso</span>
+                    <div class="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
+                        <div class="dash-metric-icon-sm" aria-hidden="true">
+                            <RotateCcw class="h-4 w-4" />
+                        </div>
+                        <span class="text-sm font-medium dark:text-zinc-300">Reembolso</span>
                     </div>
-                    <p class="mt-2 text-lg font-bold text-zinc-900 dark:text-white">
-                        {{ displayCurrency(reembolsos_total) }}
-                    </p>
-                    <p class="text-xs text-zinc-500">{{ displayNumber(reembolsos_count) }} pedido(s)</p>
+                    <div class="mt-3 flex items-baseline gap-2">
+                        <p class="text-xl font-bold text-zinc-900 dark:text-white">
+                            {{ displayCurrency(reembolsos_total) }}
+                        </p>
+                        <p class="text-xs text-zinc-500">{{ displayNumber(reembolsos_count) }} pedido(s)</p>
+                    </div>
                 </div>
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-sm"
                 >
-                    <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                        <Package class="h-4 w-4" />
-                        <span class="text-sm font-medium">Produtos</span>
+                    <div class="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
+                        <div class="dash-metric-icon-sm" aria-hidden="true">
+                            <Package class="h-4 w-4" />
+                        </div>
+                        <span class="text-sm font-medium dark:text-zinc-300">Produtos</span>
                     </div>
-                    <p class="mt-2 text-lg font-bold text-zinc-900 dark:text-white">
+                    <p class="mt-3 text-xl font-bold text-zinc-900 dark:text-white">
                         {{ displayNumber(quantidade_produtos) }}
                     </p>
                 </div>
@@ -350,12 +353,13 @@ const chartOptions = computed(() => ({
 
         <!-- Gráfico de vendas -->
         <div
-            class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+            class="panel-card-md"
         >
             <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Desempenho de vendas</h2>
             <div class="mt-4 min-h-[280px]">
                 <VueApexCharts
                     v-if="grafico_vendas.length"
+                    :key="chartPrimaryColor"
                     type="area"
                     height="280"
                     :options="chartOptions"

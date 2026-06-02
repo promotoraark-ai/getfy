@@ -17,6 +17,15 @@ class User extends Authenticatable
      *
      * @var list<string>
      */
+    public const ROLE_ADMIN = 'admin';
+    public const ROLE_INFOPRODUTOR = 'infoprodutor';
+    public const ROLE_ALUNO = 'aluno';
+    public const ROLE_TEAM = 'team';
+
+    public const ROLE_COPRODUTOR = 'coprodutor';
+
+    public const ROLE_AFILIADO = 'afiliado';
+
     protected $fillable = [
         'name',
         'email',
@@ -26,12 +35,10 @@ class User extends Authenticatable
         'role',
         'tenant_id',
         'team_role_id',
+        'pix_key',
+        'pix_key_type',
+        'pix_owner_document',
     ];
-
-    public const ROLE_ADMIN = 'admin';
-    public const ROLE_INFOPRODUTOR = 'infoprodutor';
-    public const ROLE_ALUNO = 'aluno';
-    public const ROLE_TEAM = 'team';
 
     public function isAdmin(): bool
     {
@@ -53,9 +60,49 @@ class User extends Authenticatable
         return $this->role === self::ROLE_TEAM;
     }
 
+    public function isCoprodutor(): bool
+    {
+        return $this->role === self::ROLE_COPRODUTOR;
+    }
+
+    public function isAfiliado(): bool
+    {
+        return $this->role === self::ROLE_AFILIADO;
+    }
+
+    public function isPartner(): bool
+    {
+        return $this->isCoprodutor() || $this->isAfiliado();
+    }
+
+    public function usesPartnerPanel(): bool
+    {
+        return app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($this);
+    }
+
     public function canAccessPanel(): bool
     {
-        return $this->isAdmin() || $this->isInfoprodutor() || $this->isTeam();
+        return $this->isAdmin() || $this->isInfoprodutor() || $this->isTeam() || $this->isPartner();
+    }
+
+    public function coproducerProducts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductCoproducer::class);
+    }
+
+    public function affiliateProducts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductAffiliate::class);
+    }
+
+    public function commissionEntries(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CommissionEntry::class, 'beneficiary_user_id');
+    }
+
+    public function walletTransactions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(WalletTransaction::class);
     }
 
     public function teamRole(): \Illuminate\Database\Eloquent\Relations\BelongsTo

@@ -9,7 +9,7 @@ class TestPluginStoreConnection extends Command
 {
     protected $signature = 'plugin-store:test';
 
-    protected $description = 'Testa a conexão com a loja de plugins (PLUGIN_STORE_URL)';
+    protected $description = 'Testa a conexão com a loja de plugins (config/getfy.php plugin_store_url)';
 
     public function handle(): int
     {
@@ -17,8 +17,7 @@ class TestPluginStoreConnection extends Command
         $url = config('services.plugin_store.url');
 
         if (! $store->isConfigured()) {
-            $this->error('PLUGIN_STORE_URL não está definido no .env.');
-            $this->line('Exemplo: PLUGIN_STORE_URL=http://plugins-getfy.test');
+            $this->error('URL da loja não configurada em config/getfy.php (plugin_store_url).');
 
             return 1;
         }

@@ -117,7 +117,7 @@ async function openPdf() {
             {{ error }}
         </div>
 
-        <div class="grid grid-cols-1 gap-4 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950 sm:grid-cols-2">
+        <div class="panel-card-md grid grid-cols-1 gap-4 dark:bg-zinc-950 sm:grid-cols-2">
             <div class="space-y-1">
                 <label class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Data de</label>
                 <input

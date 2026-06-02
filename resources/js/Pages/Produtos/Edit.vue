@@ -4,10 +4,13 @@ import { useForm, Link, router, usePage } from '@inertiajs/vue3';
 import { useSidebar } from '@/composables/useSidebar';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import Button from '@/components/ui/Button.vue';
+import BetaBadge from '@/components/ui/BetaBadge.vue';
 import Toggle from '@/components/ui/Toggle.vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import GatewaySelect from '@/components/ui/GatewaySelect.vue';
 import GatewayRedundancySidebar from '@/components/produtos/GatewayRedundancySidebar.vue';
+import ProductCoproducaoTab from '@/components/produtos/ProductCoproducaoTab.vue';
+import ProductAfiliadosTab from '@/components/produtos/ProductAfiliadosTab.vue';
 import {
     LayoutDashboard,
     Settings,
@@ -37,6 +40,8 @@ import {
 } from 'lucide-vue-next';
 import axios from 'axios';
 import EmailTemplatePreview from '@/components/produtos/EmailTemplatePreview.vue';
+import ConversionPixelsForm from '@/components/produtos/ConversionPixelsForm.vue';
+import { mergeConversionPixels } from '@/lib/conversionPixels';
 
 function getCsrfToken() {
     const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
@@ -92,150 +97,6 @@ const DEFAULT_CART_RECOVERY_EMAIL = {
     },
 };
 
-const ENTRY_FLAGS = {
-    fire_purchase_on_pix: true,
-    fire_purchase_on_boleto: true,
-    disable_order_bump_events: false,
-};
-
-function newMetaEntry() {
-    return { id: randomClientId(), pixel_id: '', access_token: '', ...ENTRY_FLAGS };
-}
-function newTiktokEntry() {
-    return { id: randomClientId(), pixel_id: '', access_token: '', ...ENTRY_FLAGS };
-}
-function newGoogleAdsEntry() {
-    return { id: randomClientId(), conversion_id: '', conversion_label: '', ...ENTRY_FLAGS };
-}
-function newGaEntry() {
-    return { id: randomClientId(), measurement_id: '', ...ENTRY_FLAGS };
-}
-
-const DEFAULT_CONVERSION_PIXELS = {
-    meta: { enabled: false, entries: [] },
-    tiktok: { enabled: false, entries: [] },
-    google_ads: { enabled: false, entries: [] },
-    google_analytics: { enabled: false, entries: [] },
-    custom_script: [],
-};
-
-function mergeConversionPixels(raw) {
-    if (!raw || typeof raw !== 'object') return JSON.parse(JSON.stringify(DEFAULT_CONVERSION_PIXELS));
-    const out = JSON.parse(JSON.stringify(DEFAULT_CONVERSION_PIXELS));
-
-    function normalizeMetaLike(block, newEntryFn) {
-        const enabled = !!block?.enabled;
-        if (Array.isArray(block?.entries)) {
-            return {
-                enabled,
-                entries: block.entries
-                    .filter((e) => e && typeof e === 'object')
-                    .map((e) => ({ ...newEntryFn(), ...e, id: e.id || randomClientId() })),
-            };
-        }
-        if (block?.pixel_id != null || block?.access_token != null) {
-            const pixel_id = String(block.pixel_id ?? '').trim();
-            const access_token = String(block.access_token ?? '').trim();
-            if (pixel_id || access_token) {
-                return {
-                    enabled,
-                    entries: [
-                        {
-                            id: randomClientId(),
-                            pixel_id,
-                            access_token,
-                            fire_purchase_on_pix: block.fire_purchase_on_pix !== false,
-                            fire_purchase_on_boleto: block.fire_purchase_on_boleto !== false,
-                            disable_order_bump_events: !!block.disable_order_bump_events,
-                        },
-                    ],
-                };
-            }
-        }
-        return { enabled, entries: [] };
-    }
-
-    function normalizeGoogleAdsBlock(block) {
-        const enabled = !!block?.enabled;
-        if (Array.isArray(block?.entries)) {
-            return {
-                enabled,
-                entries: block.entries
-                    .filter((e) => e && typeof e === 'object')
-                    .map((e) => ({ ...newGoogleAdsEntry(), ...e, id: e.id || randomClientId() })),
-            };
-        }
-        const conversion_id = String(block?.conversion_id ?? '').trim();
-        if (conversion_id) {
-            return {
-                enabled,
-                entries: [
-                    {
-                        id: randomClientId(),
-                        conversion_id,
-                        conversion_label: String(block.conversion_label ?? '').trim(),
-                        fire_purchase_on_pix: block.fire_purchase_on_pix !== false,
-                        fire_purchase_on_boleto: block.fire_purchase_on_boleto !== false,
-                        disable_order_bump_events: !!block.disable_order_bump_events,
-                    },
-                ],
-            };
-        }
-        return { enabled, entries: [] };
-    }
-
-    function normalizeGaBlock(block) {
-        const enabled = !!block?.enabled;
-        if (Array.isArray(block?.entries)) {
-            return {
-                enabled,
-                entries: block.entries
-                    .filter((e) => e && typeof e === 'object')
-                    .map((e) => ({ ...newGaEntry(), ...e, id: e.id || randomClientId() })),
-            };
-        }
-        const measurement_id = String(block?.measurement_id ?? '').trim();
-        if (measurement_id) {
-            return {
-                enabled,
-                entries: [
-                    {
-                        id: randomClientId(),
-                        measurement_id,
-                        fire_purchase_on_pix: block.fire_purchase_on_pix !== false,
-                        fire_purchase_on_boleto: block.fire_purchase_on_boleto !== false,
-                        disable_order_bump_events: !!block.disable_order_bump_events,
-                    },
-                ],
-            };
-        }
-        return { enabled, entries: [] };
-    }
-
-    if (raw.meta && typeof raw.meta === 'object') {
-        out.meta = normalizeMetaLike(raw.meta, newMetaEntry);
-    }
-    if (raw.tiktok && typeof raw.tiktok === 'object') {
-        out.tiktok = normalizeMetaLike(raw.tiktok, newTiktokEntry);
-    }
-    if (raw.google_ads && typeof raw.google_ads === 'object') {
-        out.google_ads = normalizeGoogleAdsBlock(raw.google_ads);
-    }
-    if (raw.google_analytics && typeof raw.google_analytics === 'object') {
-        out.google_analytics = normalizeGaBlock(raw.google_analytics);
-    }
-    out.custom_script = Array.isArray(raw.custom_script) ? raw.custom_script.filter((s) => s && typeof s === 'object').map((s) => ({ id: s.id || randomClientId(), name: s.name || '', script: s.script || '' })) : [];
-    return out;
-}
-
-const PIXEL_TABS = [
-    { id: 'meta', label: 'Meta Ads', image: '/images/pixels/meta.png' },
-    { id: 'tiktok', label: 'TikTok Ads', image: '/images/pixels/tiktok.png' },
-    { id: 'google_ads', label: 'Google Ads', image: '/images/pixels/googleads.png' },
-    { id: 'google_analytics', label: 'Google Analytics', image: '/images/pixels/google-analytics.png' },
-    { id: 'custom_script', label: 'Script personalizado', image: '/images/pixels/script.png' },
-];
-
 const BASE_TABS = [
     { id: 'geral', label: 'Geral', icon: LayoutDashboard },
     { id: 'configuracoes', label: 'Configurações', icon: Settings },
@@ -244,8 +105,8 @@ const BASE_TABS = [
     { id: 'upsell_downsell', label: 'Upsell / Downsell', icon: ArrowUpDown },
     { id: 'checkout', label: 'Checkout', icon: ShoppingCart },
     { id: 'links', label: 'Links', icon: Link2 },
-    { id: 'coproducao', label: 'Co-produção', icon: Handshake },
-    { id: 'afiliados', label: 'Afiliados', icon: Users },
+    { id: 'coproducao', label: 'Co-produção', icon: Handshake, beta: true },
+    { id: 'afiliados', label: 'Afiliados', icon: Users, beta: true },
     { id: 'member_builder', label: 'Member Builder', icon: LayoutGrid, linkOnly: true },
     { id: 'reembolso', label: 'Reembolso', icon: RotateCcw, showForType: 'area_membros' },
 ];
@@ -485,7 +346,6 @@ const currentImageUrl = computed(() => {
     return props.produto.image_url ?? null;
 });
 
-const selectedPixelTab = ref('meta');
 const logoUploading = ref(false);
 const logoError = ref('');
 const logoInputRef = ref(null);
@@ -1402,7 +1262,10 @@ function submit() {
                         @click="setTab(tab.id)"
                     >
                         <component :is="tab.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                        {{ tab.label }}
+                        <span class="flex min-w-0 flex-1 items-center gap-1.5">
+                            <span class="truncate">{{ tab.label }}</span>
+                            <BetaBadge v-if="tab.beta" size="xs" />
+                        </span>
                     </button>
                 </template>
             </nav>
@@ -1440,7 +1303,10 @@ function submit() {
                     @click="setTab(tab.id)"
                 >
                     <component :is="tab.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {{ tab.label }}
+                    <span class="flex items-center gap-1.5">
+                        {{ tab.label }}
+                        <BetaBadge v-if="tab.beta" size="xs" />
+                    </span>
                 </button>
             </template>
         </nav>
@@ -1452,7 +1318,7 @@ function submit() {
             <form class="mx-auto w-full max-w-3xl space-y-8 xl:max-w-6xl" @submit.prevent="submit">
                 <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
                 <!-- Informações básicas (nome, slug, descrição, imagem, status) -->
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Informações básicas</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Nome, identificador e imagem do produto.</p>
@@ -1520,7 +1386,7 @@ function submit() {
                 </section>
 
                 <!-- Preço e cobrança -->
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95 xl:min-h-0">
+                <section class="panel-table xl:min-h-0">
                     <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Preço e cobrança</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Defina como o produto será cobrado e o valor base.</p>
@@ -1636,7 +1502,7 @@ function submit() {
                                     <li
                                         v-for="offer in (produto.offers || [])"
                                         :key="offer.id"
-                                        class="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 dark:border-zinc-600/80 dark:bg-zinc-800/50"
+                                        class="panel-card flex flex-wrap items-center gap-3 px-3 py-2.5"
                                     >
                                         <div class="min-w-0 flex-1">
                                             <span class="font-medium text-zinc-900 dark:text-white">{{ offer.name }}</span>
@@ -1671,7 +1537,7 @@ function submit() {
                                         Nenhuma oferta. Adicione abaixo ou use apenas o preço base.
                                     </li>
                                 </ul>
-                                <form v-if="offerFormVisible" class="rounded-xl border border-zinc-200/80 bg-white p-4 dark:border-zinc-600/80 dark:bg-zinc-800/80" @submit.prevent="submitOffer">
+                                <form v-if="offerFormVisible" class="panel-card-sm" @submit.prevent="submitOffer">
                                     <p class="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ editingOffer ? 'Editar oferta' : 'Nova oferta' }}</p>
                                     <div class="grid gap-3 sm:grid-cols-[1fr,1fr,auto]">
                                         <input v-model="offerForm.name" type="text" required :class="inputClass" placeholder="Nome (ex: Básico)" />
@@ -1738,7 +1604,7 @@ function submit() {
                                     <li
                                         v-for="plan in (produto.subscription_plans || [])"
                                         :key="plan.id"
-                                        class="flex flex-wrap items-center gap-3 rounded-lg border border-zinc-200/80 bg-zinc-50/50 px-3 py-2.5 dark:border-zinc-600/80 dark:bg-zinc-800/50"
+                                        class="panel-card flex flex-wrap items-center gap-3 px-3 py-2.5"
                                     >
                                         <div class="min-w-0 flex-1">
                                             <span class="font-medium text-zinc-900 dark:text-white">{{ plan.name }}</span>
@@ -1773,7 +1639,7 @@ function submit() {
                                         Nenhum plano. Adicione abaixo.
                                     </li>
                                 </ul>
-                                <form v-if="planFormVisible" class="rounded-xl border border-zinc-200/80 bg-white p-4 dark:border-zinc-600/80 dark:bg-zinc-800/80" @submit.prevent="submitPlan">
+                                <form v-if="planFormVisible" class="panel-card-sm" @submit.prevent="submitPlan">
                                     <p class="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ editingPlan ? 'Editar plano' : 'Novo plano' }}</p>
                                     <div class="grid gap-3 sm:grid-cols-2">
                                         <input v-model="planForm.name" type="text" required :class="inputClass" placeholder="Nome (ex: Mensal)" />
@@ -1845,7 +1711,7 @@ function submit() {
                     </div>
                 </section>
 
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95 xl:min-h-0">
+                <section class="panel-table xl:min-h-0">
                     <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Checkout público</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
@@ -1853,7 +1719,7 @@ function submit() {
                         </p>
                     </div>
                     <div class="space-y-6 p-6">
-                        <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-4 dark:border-zinc-600/80 dark:bg-zinc-900/40">
+                        <div class="panel-card-sm">
                             <Toggle v-model="form.checkout_force.enabled" label="Forçar idioma e moeda no checkout" />
                             <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                                 Quando ativo, ignora a sugestão por país (geo) até o visitante mudar manualmente o idioma ou a moeda no checkout.
@@ -1884,7 +1750,7 @@ function submit() {
                             </div>
                         </div>
 
-                        <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-4 dark:border-zinc-600/80 dark:bg-zinc-900/40">
+                        <div class="panel-card-sm">
                             <Toggle v-model="form.custom_prices_by_currency.enabled" label="Personalizar preço exibido/cobrado por moeda" />
                             <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                                 Aplica-se apenas ao <strong class="font-medium text-zinc-700 dark:text-zinc-300">preço base do produto</strong> (sem oferta nem plano). Order bumps seguem em BRL e são convertidos pela taxa.
@@ -1940,7 +1806,7 @@ function submit() {
         <template v-if="currentTab === 'configuracoes'">
             <form class="w-full space-y-8" @submit.prevent="submit">
                 <!-- Métodos de pagamento -->
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200/80 px-6 py-4 dark:border-zinc-700/80">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Métodos de pagamento</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
@@ -1950,7 +1816,7 @@ function submit() {
                     <div class="p-6">
                         <div class="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
                             <!-- PIX -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm dark:bg-zinc-700/50">
@@ -1982,7 +1848,7 @@ function submit() {
                                 </div>
                             </div>
                             <!-- Cartão -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm dark:bg-zinc-700/50">
@@ -2056,7 +1922,7 @@ function submit() {
                                 </div>
                             </div>
                             <!-- Boleto -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm dark:bg-zinc-700/50">
@@ -2097,7 +1963,7 @@ function submit() {
                                 </div>
                             </div>
                             <!-- Apple Pay -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-black p-2 shadow-sm">
@@ -2137,7 +2003,7 @@ function submit() {
                                 </div>
                             </div>
                             <!-- Google Pay -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm">
@@ -2182,7 +2048,7 @@ function submit() {
                             <!-- PIX automático (somente Assinatura) -->
                             <div
                                 v-if="form.billing_type === 'subscription'"
-                                class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50"
+                                class="panel-card-md"
                             >
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
@@ -2215,7 +2081,7 @@ function submit() {
                                 </div>
                             </div>
                             <!-- Criptomoeda -->
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/50 p-5 dark:border-zinc-600/80 dark:bg-zinc-800/50">
+                            <div class="panel-card-md">
                                 <div class="flex flex-col gap-3">
                                     <div class="flex items-center gap-3">
                                         <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white p-2 shadow-sm dark:bg-zinc-700/50">
@@ -2251,7 +2117,7 @@ function submit() {
                 </section>
 
                 <!-- Tipo de entrega -->
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Tipo de entrega</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Como o cliente recebe o produto após a compra.</p>
@@ -2306,7 +2172,7 @@ function submit() {
                 <!-- Área de membros externa (Cademí) -->
                 <section
                     v-if="form.type === 'area_membros_externa'"
-                    class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95"
+                    class="panel-table"
                 >
                     <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Área de membros externa (Cademí)</h2>
@@ -2552,7 +2418,7 @@ function submit() {
                                 <p class="text-sm text-zinc-600 dark:text-zinc-400">
                                     Quando usar <strong>Pagar.me</strong> ou <strong>Efí</strong> no cartão e/ou no boleto, defina se o checkout pede o endereço do cliente ou usa o endereço da empresa (fatura/antifraude). No modo empresa, preencha o endereço abaixo (CEP com 8 dígitos, UF com 2 letras).
                                 </p>
-                                <div class="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-600 dark:bg-zinc-800/50">
+                                <div class="panel-card p-3 space-y-2">
                                     <p class="text-xs font-medium text-zinc-700 dark:text-zinc-300">Modo no checkout</p>
                                     <label class="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-600 dark:bg-zinc-900/80">
                                         <input v-model="form.pagarme_billing.mode" type="radio" class="mt-0.5" value="customer" />
@@ -2638,195 +2504,13 @@ function submit() {
                 </Teleport>
 
                 <!-- Pixels de conversão -->
-                <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200/80 bg-gradient-to-r from-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-zinc-800/80 dark:to-zinc-800/50">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Pixels de conversão</h2>
                         <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Configure pixels para rastrear conversões no checkout, upsell e downsell.</p>
                     </div>
-                    <div class="space-y-6 p-6">
-                        <!-- Carrossel de abas -->
-                        <div class="flex gap-3 overflow-x-auto pb-2 scroll-smooth" style="scrollbar-width: thin;">
-                            <button
-                                v-for="tab in PIXEL_TABS"
-                                :key="tab.id"
-                                type="button"
-                                :class="[
-                                    'flex shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-4 w-28 h-24 transition-all duration-200',
-                                    selectedPixelTab === tab.id
-                                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10 dark:bg-[var(--color-primary)]/20'
-                                        : 'border-zinc-200 bg-zinc-50 hover:border-zinc-300 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:hover:border-zinc-500 dark:hover:bg-zinc-700',
-                                ]"
-                                @click="selectedPixelTab = tab.id"
-                            >
-                                <img :src="tab.image" :alt="tab.label" class="h-8 w-8 object-contain" @error="($e) => $e.target && ($e.target.style.display = 'none')" />
-                                <span class="text-xs font-medium text-zinc-700 dark:text-zinc-300">{{ tab.label }}</span>
-                            </button>
-                        </div>
-
-                        <!-- Painel Meta Ads -->
-                        <div v-if="selectedPixelTab === 'meta'" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 space-y-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Meta Ads (Facebook)</h3>
-                                <div class="flex items-center gap-3">
-                                    <Button type="button" variant="outline" size="sm" :disabled="!form.conversion_pixels.meta.enabled" @click="form.conversion_pixels.meta.entries.push(newMetaEntry())">
-                                        <Plus class="h-4 w-4 mr-1" /> Adicionar pixel
-                                    </Button>
-                                    <Toggle v-model="form.conversion_pixels.meta.enabled" />
-                                </div>
-                            </div>
-                            <template v-if="form.conversion_pixels.meta.enabled">
-                                <div v-for="(item, idx) in form.conversion_pixels.meta.entries" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Pixel {{ idx + 1 }}</span>
-                                        <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.meta.entries.splice(idx, 1)">
-                                            <Trash2 class="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Pixel ID</label>
-                                        <input v-model="item.pixel_id" type="text" placeholder="Ex: 123456789" :class="inputClass" />
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Access Token (CAPI)</label>
-                                        <input v-model="item.access_token" type="password" placeholder="Token para Conversions API" :class="inputClass" autocomplete="off" />
-                                        <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Usado para enviar eventos server-side (CAPI).</p>
-                                    </div>
-                                    <div class="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                                        <Checkbox v-model="item.fire_purchase_on_pix" label="Disparar Purchase ao gerar PIX (não na aprovação)?" />
-                                        <Checkbox v-model="item.fire_purchase_on_boleto" label="Disparar Purchase ao gerar boleto (não na aprovação)?" />
-                                        <Checkbox v-model="item.disable_order_bump_events" label="Desativar eventos de order bumps?" />
-                                    </div>
-                                </div>
-                                <p v-if="form.conversion_pixels.meta.entries.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhum pixel. Clique em «Adicionar pixel» ou desative a integração.</p>
-                            </template>
-                        </div>
-
-                        <!-- Painel TikTok Ads -->
-                        <div v-if="selectedPixelTab === 'tiktok'" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 space-y-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">TikTok Ads</h3>
-                                <div class="flex items-center gap-3">
-                                    <Button type="button" variant="outline" size="sm" :disabled="!form.conversion_pixels.tiktok.enabled" @click="form.conversion_pixels.tiktok.entries.push(newTiktokEntry())">
-                                        <Plus class="h-4 w-4 mr-1" /> Adicionar pixel
-                                    </Button>
-                                    <Toggle v-model="form.conversion_pixels.tiktok.enabled" />
-                                </div>
-                            </div>
-                            <template v-if="form.conversion_pixels.tiktok.enabled">
-                                <div v-for="(item, idx) in form.conversion_pixels.tiktok.entries" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Pixel {{ idx + 1 }}</span>
-                                        <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.tiktok.entries.splice(idx, 1)">
-                                            <Trash2 class="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Pixel ID</label>
-                                        <input v-model="item.pixel_id" type="text" placeholder="Ex: C1X2Y3Z4..." :class="inputClass" />
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Access Token</label>
-                                        <input v-model="item.access_token" type="password" placeholder="Token do TikTok Events API" :class="inputClass" autocomplete="off" />
-                                    </div>
-                                    <div class="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                                        <Checkbox v-model="item.fire_purchase_on_pix" label="Disparar Purchase ao gerar PIX (não na aprovação)?" />
-                                        <Checkbox v-model="item.fire_purchase_on_boleto" label="Disparar Purchase ao gerar boleto (não na aprovação)?" />
-                                        <Checkbox v-model="item.disable_order_bump_events" label="Desativar eventos de order bumps?" />
-                                    </div>
-                                </div>
-                                <p v-if="form.conversion_pixels.tiktok.entries.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhum pixel. Clique em «Adicionar pixel» ou desative a integração.</p>
-                            </template>
-                        </div>
-
-                        <!-- Painel Google Ads -->
-                        <div v-if="selectedPixelTab === 'google_ads'" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 space-y-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Google Ads</h3>
-                                <div class="flex items-center gap-3">
-                                    <Button type="button" variant="outline" size="sm" :disabled="!form.conversion_pixels.google_ads.enabled" @click="form.conversion_pixels.google_ads.entries.push(newGoogleAdsEntry())">
-                                        <Plus class="h-4 w-4 mr-1" /> Adicionar conversão
-                                    </Button>
-                                    <Toggle v-model="form.conversion_pixels.google_ads.enabled" />
-                                </div>
-                            </div>
-                            <template v-if="form.conversion_pixels.google_ads.enabled">
-                                <div v-for="(item, idx) in form.conversion_pixels.google_ads.entries" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Conversão {{ idx + 1 }}</span>
-                                        <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.google_ads.entries.splice(idx, 1)">
-                                            <Trash2 class="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Conversion ID</label>
-                                        <input v-model="item.conversion_id" type="text" placeholder="Ex: AW-123456789" :class="inputClass" />
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Conversion Label</label>
-                                        <input v-model="item.conversion_label" type="text" placeholder="Ex: AbCdEfGhIjKlMn" :class="inputClass" />
-                                    </div>
-                                    <div class="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                                        <Checkbox v-model="item.fire_purchase_on_pix" label="Disparar Purchase ao gerar PIX (não na aprovação)?" />
-                                        <Checkbox v-model="item.fire_purchase_on_boleto" label="Disparar Purchase ao gerar boleto (não na aprovação)?" />
-                                        <Checkbox v-model="item.disable_order_bump_events" label="Desativar eventos de order bumps?" />
-                                    </div>
-                                </div>
-                                <p v-if="form.conversion_pixels.google_ads.entries.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhuma conversão. Clique em «Adicionar conversão» ou desative a integração.</p>
-                            </template>
-                        </div>
-
-                        <!-- Painel Google Analytics -->
-                        <div v-if="selectedPixelTab === 'google_analytics'" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 space-y-4">
-                            <div class="flex flex-wrap items-center justify-between gap-2">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Google Analytics (GA4)</h3>
-                                <div class="flex items-center gap-3">
-                                    <Button type="button" variant="outline" size="sm" :disabled="!form.conversion_pixels.google_analytics.enabled" @click="form.conversion_pixels.google_analytics.entries.push(newGaEntry())">
-                                        <Plus class="h-4 w-4 mr-1" /> Adicionar propriedade
-                                    </Button>
-                                    <Toggle v-model="form.conversion_pixels.google_analytics.enabled" />
-                                </div>
-                            </div>
-                            <template v-if="form.conversion_pixels.google_analytics.enabled">
-                                <div v-for="(item, idx) in form.conversion_pixels.google_analytics.entries" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">GA4 {{ idx + 1 }}</span>
-                                        <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.google_analytics.entries.splice(idx, 1)">
-                                            <Trash2 class="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                    <div>
-                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Measurement ID</label>
-                                        <input v-model="item.measurement_id" type="text" placeholder="Ex: G-XXXXXXXXXX" :class="inputClass" />
-                                    </div>
-                                    <div class="space-y-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
-                                        <Checkbox v-model="item.fire_purchase_on_pix" label="Disparar Purchase ao gerar PIX (não na aprovação)?" />
-                                        <Checkbox v-model="item.fire_purchase_on_boleto" label="Disparar Purchase ao gerar boleto (não na aprovação)?" />
-                                        <Checkbox v-model="item.disable_order_bump_events" label="Desativar eventos de order bumps?" />
-                                    </div>
-                                </div>
-                                <p v-if="form.conversion_pixels.google_analytics.entries.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhuma propriedade. Clique em «Adicionar propriedade» ou desative a integração.</p>
-                            </template>
-                        </div>
-
-                        <!-- Painel Script personalizado -->
-                        <div v-if="selectedPixelTab === 'custom_script'" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 space-y-4">
-                            <div class="flex items-center justify-between">
-                                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Scripts personalizados</h3>
-                                <Button type="button" variant="outline" size="sm" @click="form.conversion_pixels.custom_script.push({ id: randomClientId(), name: '', script: '' })">
-                                    <Plus class="h-4 w-4 mr-1" /> Adicionar pixel
-                                </Button>
-                            </div>
-                            <div v-for="(item, idx) in form.conversion_pixels.custom_script" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                <div class="flex items-center gap-2">
-                                    <input v-model="item.name" type="text" placeholder="Nome (opcional)" :class="inputClass + ' flex-1'" />
-                                    <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.custom_script.splice(idx, 1)">
-                                        <Trash2 class="h-4 w-4" />
-                                    </button>
-                                </div>
-                                <textarea v-model="item.script" rows="4" :class="inputClass + ' font-mono text-sm'" placeholder="Cole o código do pixel aqui (ex: <script>...</script>)" />
-                            </div>
-                            <p v-if="form.conversion_pixels.custom_script.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhum script adicionado. Clique em "Adicionar pixel" para incluir um código de rastreamento personalizado.</p>
-                        </div>
+                    <div class="p-6">
+                        <ConversionPixelsForm v-model="form.conversion_pixels" />
                     </div>
                 </section>
                 <div class="flex flex-wrap items-center gap-3">
@@ -2846,7 +2530,7 @@ function submit() {
             <form class="mx-auto w-full max-w-3xl space-y-8 xl:max-w-6xl" @submit.prevent="submit">
                 <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
                     <!-- Configuração do template -->
-                    <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                    <section class="panel-table">
                         <div class="border-b border-zinc-200/80 bg-gradient-to-r from-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-zinc-800/80 dark:to-zinc-800/50">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Template do e-mail de acesso</h2>
                             <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -2904,7 +2588,7 @@ function submit() {
                     </section>
 
                     <!-- Recuperação de carrinho -->
-                    <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                    <section class="panel-table">
                         <div class="border-b border-zinc-200/80 bg-gradient-to-r from-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-zinc-800/80 dark:to-zinc-800/50">
                             <div class="flex items-start justify-between gap-4">
                                 <div>
@@ -2926,7 +2610,7 @@ function submit() {
                                 <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-700">{link_checkout}</code>
                             </p>
 
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-4 dark:border-zinc-700/80 dark:bg-zinc-900/20 space-y-3">
+                            <div class="panel-card-sm space-y-3 dark:bg-zinc-900/20">
                                 <div class="flex items-center justify-between gap-3">
                                     <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Etapa 1 — 10 minutos</h3>
                                 </div>
@@ -2940,7 +2624,7 @@ function submit() {
                                 </div>
                             </div>
 
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-4 dark:border-zinc-700/80 dark:bg-zinc-900/20 space-y-3">
+                            <div class="panel-card-sm space-y-3 dark:bg-zinc-900/20">
                                 <div class="flex items-center justify-between gap-3">
                                     <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Etapa 2 — 5 horas</h3>
                                 </div>
@@ -2954,7 +2638,7 @@ function submit() {
                                 </div>
                             </div>
 
-                            <div class="rounded-xl border border-zinc-200/80 bg-zinc-50/40 p-4 dark:border-zinc-700/80 dark:bg-zinc-900/20 space-y-3">
+                            <div class="panel-card-sm space-y-3 dark:bg-zinc-900/20">
                                 <div class="flex items-center justify-between gap-3">
                                     <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Etapa 3 — 24 horas</h3>
                                 </div>
@@ -2971,7 +2655,7 @@ function submit() {
                     </section>
 
                     <!-- Preview do e-mail -->
-                    <section class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95 xl:sticky xl:top-6">
+                    <section class="panel-table xl:sticky xl:top-6">
                         <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Preview do e-mail</h2>
                             <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Como o e-mail será exibido para o cliente.</p>
@@ -3001,7 +2685,7 @@ function submit() {
         <!-- Aba Order Bump -->
         <template v-if="currentTab === 'order_bump'">
             <div class="w-full space-y-6">
-                <div class="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <div class="relative panel-table">
                         <div class="border-b border-zinc-200/80 bg-gradient-to-r from-[var(--color-primary)]/10 via-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-[var(--color-primary)]/15 dark:via-zinc-800/80 dark:to-zinc-800/50">
                             <div class="relative flex flex-wrap items-center justify-between gap-4">
                                 <div>
@@ -3036,7 +2720,7 @@ function submit() {
                         <li
                             v-for="bump in produto.order_bumps"
                             :key="bump.id"
-                            class="flex flex-col overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-600/80 dark:bg-zinc-800/80"
+                            class="panel-card flex flex-col overflow-hidden transition hover:border-zinc-200 dark:hover:border-zinc-600"
                         >
                             <div class="flex flex-wrap items-start gap-4 p-4 sm:flex-nowrap">
                                 <div class="flex h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-700">
@@ -3165,7 +2849,7 @@ function submit() {
         <!-- Aba Upsell / Downsell -->
         <template v-if="currentTab === 'upsell_downsell'">
             <div class="w-full space-y-6">
-                <div class="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <div class="relative panel-table">
                     <div class="border-b border-zinc-200/80 bg-gradient-to-r from-[var(--color-primary)]/10 via-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-[var(--color-primary)]/15 dark:via-zinc-800/80 dark:to-zinc-800/50">
                             <div class="flex flex-wrap items-center justify-between gap-4">
                             <div>
@@ -3198,7 +2882,7 @@ function submit() {
                     </div>
                 </div>
 
-                <div class="space-y-6 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg space-y-6">
                     <!-- Upsell -->
                     <div>
                         <Toggle v-model="upsellDownsellForm.upsell.enabled" label="Ativar upsell (após compra aprovada)" />
@@ -3206,7 +2890,7 @@ function submit() {
                         <template v-if="upsellDownsellForm.upsell.enabled">
                             <label class="mt-3 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Ofertas de upsell</label>
                             <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Títulos, cores e textos são editados em « Editar página upsell ».</p>
-                            <div v-for="(item, idx) in upsellDownsellForm.upsell.products" :key="'u-' + idx" class="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-zinc-200 bg-zinc-50/50 p-3 dark:border-zinc-600 dark:bg-zinc-800/50">
+                            <div v-for="(item, idx) in upsellDownsellForm.upsell.products" :key="'u-' + idx" class="mt-2 panel-card flex flex-wrap items-end gap-2 p-3">
                                 <div class="min-w-[140px] flex-1">
                                     <label class="mb-0.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Produto</label>
                                     <select v-model="item.product_id" :class="inputClass" class="py-2">
@@ -3270,7 +2954,7 @@ function submit() {
         <template v-if="currentTab === 'checkout'">
             <div class="w-full space-y-6">
                 <!-- Header + ação Criar checkout -->
-                <div class="relative overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <div class="relative panel-table">
                     <div class="border-b border-zinc-200/80 bg-gradient-to-r from-[var(--color-primary)]/10 via-zinc-50/90 to-zinc-100/50 px-6 py-5 dark:from-[var(--color-primary)]/15 dark:via-zinc-800/80 dark:to-zinc-800/50">
                         <div class="relative flex flex-wrap items-center justify-between gap-4">
                             <div>
@@ -3299,7 +2983,7 @@ function submit() {
                     <div
                         v-for="item in checkoutItems"
                         :key="item.id"
-                        class="flex flex-col overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-600/80 dark:bg-zinc-800/80 dark:hover:border-zinc-500/50"
+                        class="panel-card flex flex-col overflow-hidden transition hover:border-zinc-200 dark:hover:border-zinc-600 dark:hover:border-zinc-500/50"
                     >
                         <div class="flex flex-1 flex-col gap-3 p-4">
                             <div class="flex items-center gap-2">
@@ -3410,7 +3094,7 @@ function submit() {
                                 <li
                                     v-for="item in offerPlanItemsWithoutExclusiveCheckout"
                                     :key="item.id"
-                                    class="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 px-4 py-3 dark:border-zinc-600 dark:bg-zinc-800/50"
+                                    class="panel-card flex items-center justify-between gap-3 px-4 py-3"
                                 >
                                     <span class="text-sm font-medium text-zinc-900 dark:text-white">{{ item.type === 'offer' ? `Oferta: ${item.label}` : `Plano: ${item.label}` }}</span>
                                     <Button type="button" size="sm" class="shrink-0 rounded-lg" @click="ensureCheckoutSlug(item); showCreateCheckoutModal = false">
@@ -3466,7 +3150,7 @@ function submit() {
                         <li
                             v-for="(item, index) in allCheckoutLinks"
                             :key="item.id"
-                            class="group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-600/80 dark:bg-zinc-800/80 dark:hover:border-zinc-500/50"
+                            class="group relative panel-card flex flex-col overflow-hidden transition hover:border-zinc-200 dark:hover:border-zinc-600 dark:hover:border-zinc-500/50"
                         >
                             <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                                 <div class="min-w-0 flex-1">
@@ -3512,16 +3196,12 @@ function submit() {
 
         <!-- Aba Co-produção -->
         <template v-if="currentTab === 'coproducao'">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-700 dark:bg-zinc-800">
-                <Handshake class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" />
-                <p class="mt-3 text-center font-medium text-zinc-600 dark:text-zinc-400">Co-produção</p>
-                <p class="mt-1 text-center text-sm text-zinc-500 dark:text-zinc-500">Esta funcionalidade será implementada em breve.</p>
-            </div>
+            <ProductCoproducaoTab :product-id="produto.id" />
         </template>
 
         <!-- Aba Reembolso (área de membros) -->
         <template v-if="currentTab === 'reembolso' && produto.type === 'area_membros'">
-            <div class="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-lg">
                 <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Reembolso na área de membros</h2>
                 <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                     Permite que o aluno solicite reembolso pelo menu da conta no header da área de membros.
@@ -3579,17 +3259,13 @@ function submit() {
 
         <!-- Aba Afiliados -->
         <template v-if="currentTab === 'afiliados'">
-            <div class="rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-700 dark:bg-zinc-800">
-                <Users class="mx-auto h-12 w-12 text-zinc-400 dark:text-zinc-500" />
-                <p class="mt-3 text-center font-medium text-zinc-600 dark:text-zinc-400">Afiliados</p>
-                <p class="mt-1 text-center text-sm text-zinc-500 dark:text-zinc-500">Esta funcionalidade será implementada em breve.</p>
-            </div>
+            <ProductAfiliadosTab :product-id="produto.id" />
         </template>
 
         <!-- Abas de plugins (ex.: AutoZap) -->
         <template v-for="pt in pluginTabs" :key="pt.id">
             <template v-if="currentTab === pt.id">
-                <div class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95">
+                <div class="panel-table">
                     <div class="border-b border-zinc-200/80 px-6 py-4 dark:border-zinc-700/80">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">{{ pt.label }}</h2>
                         <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">

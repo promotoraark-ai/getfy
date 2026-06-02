@@ -977,6 +977,7 @@ class MemberAreaAppController extends Controller
             'keys' => ['required', 'array'],
             'keys.auth' => ['required', 'string'],
             'keys.p256dh' => ['required', 'string'],
+            'renewed' => ['sometimes', 'boolean'],
         ]);
         $keys = $validated['keys'];
         $keys['auth'] = $this->normalizeBase64KeyForPush((string) ($keys['auth'] ?? ''));
@@ -997,6 +998,7 @@ class MemberAreaAppController extends Controller
             'success' => true,
             'subscribed' => true,
             'subscription_id' => $subscription->id,
+            'renewed' => (bool) ($validated['renewed'] ?? false),
             'updated_at' => $subscription->updated_at?->toISOString(),
         ]);
     }

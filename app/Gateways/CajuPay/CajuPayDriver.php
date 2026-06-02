@@ -86,7 +86,8 @@ class CajuPayDriver implements GatewayDriver
         float $amount,
         array $consumer,
         string $externalId,
-        string $postbackUrl
+        string $postbackUrl,
+        ?string $splitId = null,
     ): array {
         unset($postbackUrl);
         if (! $this->hasApiKeys($credentials)) {
@@ -116,6 +117,9 @@ class CajuPayDriver implements GatewayDriver
                 'document' => $document,
             ],
         ];
+        if ($splitId) {
+            $body['split_id'] = $splitId;
+        }
 
         $response = $this->httpForCredentials($credentials)
             ->withHeaders(['Idempotency-Key' => Str::limit($idempotencyKey, 200, '')])
@@ -393,7 +397,8 @@ class CajuPayDriver implements GatewayDriver
         string $externalId,
         array $consumer,
         array $allowedMethods,
-        string $defaultMethod
+        string $defaultMethod,
+        ?string $locale = null
     ): array {
         if (! $this->hasApiKeys($credentials)) {
             throw new \RuntimeException('CajuPay: configure a chave pública e a chave secreta da API (painel CajuPay → API / Chaves).');
@@ -445,6 +450,11 @@ class CajuPayDriver implements GatewayDriver
 
         if ($defaultMethod !== '') {
             $body['default_method'] = $defaultMethod;
+        }
+
+        $localeTag = trim((string) $locale);
+        if ($localeTag !== '') {
+            $body['locale'] = mb_substr($localeTag, 0, 16);
         }
 
         $idempotencyKey = 'getfy-sdk-'.$externalId.'-'.Str::lower(Str::random(8));
@@ -928,5 +938,200 @@ class CajuPayDriver implements GatewayDriver
         $email = trim($email);
 
         return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>
+     */
+    public function getWalletBalance(array $credentials, string $kind = 'main'): array
+    {
+        $response = $this->httpForCredentials($credentials)
+            ->get('/api/wallet/balance', ['kind' => $kind]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay wallet balance: '.$response->body());
+        }
+
+        return $response->json() ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return list<array<string, mixed>>
+     */
+    public function getWalletEntries(array $credentials, string $kind = 'main', int $limit = 50): array
+    {
+        $response = $this->httpForCredentials($credentials)
+            ->get('/api/wallet/entries', ['kind' => $kind, 'limit' => $limit]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay wallet entries: '.$response->body());
+        }
+
+        $data = $response->json();
+        if (is_array($data) && isset($data['data']) && is_array($data['data'])) {
+            return $data['data'];
+        }
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    public function createSplit(array $credentials, string $name, int $percentBps): string
+    {
+        $response = $this->httpForCredentials($credentials)->post('/api/splits', [
+            'name' => $name,
+            'percent_bps' => $percentBps,
+        ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay create split: '.$response->body());
+        }
+
+        $id = $response->json('id') ?? $response->json('data.id');
+        if (! is_string($id) || $id === '') {
+            throw new \RuntimeException('CajuPay create split: ID ausente na resposta.');
+        }
+
+        return $id;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    public function updateSplit(array $credentials, string $splitId, string $name, int $percentBps): void
+    {
+        $response = $this->httpForCredentials($credentials)->put('/api/splits/'.$splitId, [
+            'name' => $name,
+            'percent_bps' => $percentBps,
+        ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay update split: '.$response->body());
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>
+     */
+    public function createPayout(
+        array $credentials,
+        int $amountCents,
+        string $pixKey,
+        string $pixKeyType,
+        string $idempotencyKey,
+        ?string $keyOwnerDocument = null,
+    ): array {
+        $pixKeyType = strtolower($pixKeyType);
+        if ($pixKeyType === 'random') {
+            $pixKeyType = 'evp';
+        }
+
+        $body = [
+            'amount_cents' => $amountCents,
+            'currency' => 'BRL',
+            'wallet_kind' => 'main',
+            'destination' => ['method' => 'dict'],
+            'pix_key' => $pixKey,
+            'pix_key_type' => $pixKeyType,
+        ];
+
+        $document = $keyOwnerDocument ?? '';
+        if ($document === '' && in_array($pixKeyType, ['cpf', 'cnpj'], true)) {
+            $document = preg_replace('/\D/', '', $pixKey);
+        }
+        if ($document !== '') {
+            $body['key_owner_document'] = preg_replace('/\D/', '', $document);
+        }
+
+        $response = $this->httpForCredentials($credentials)
+            ->withHeaders(['Idempotency-Key' => $idempotencyKey])
+            ->post('/api/payouts', $body);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay payout: '.$response->body());
+        }
+
+        return $response->json() ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>
+     */
+    public function getPayout(array $credentials, string $payoutId): array
+    {
+        $response = $this->httpForCredentials($credentials)
+            ->get('/api/payouts/'.$payoutId);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay get payout: '.$response->body());
+        }
+
+        return $response->json() ?? [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return list<array<string, mixed>>
+     */
+    public function listPayouts(array $credentials, int $limit = 50): array
+    {
+        $response = $this->httpForCredentials($credentials)
+            ->get('/api/payouts', ['limit' => $limit]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('CajuPay list payouts: '.$response->body());
+        }
+
+        $data = $response->json();
+        if (is_array($data) && isset($data['data']) && is_array($data['data'])) {
+            return $data['data'];
+        }
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $response
+     */
+    public function normalizePayoutStatus(array $response): string
+    {
+        $status = strtolower((string) (
+            $response['status']
+            ?? $response['data']['status']
+            ?? $response['payout_status']
+            ?? ''
+        ));
+
+        return match (true) {
+            in_array($status, ['paid', 'completed', 'success', 'succeeded'], true) => 'paid',
+            in_array($status, ['failed', 'error', 'rejected'], true) => 'failed',
+            in_array($status, ['cancelled', 'canceled'], true) => 'cancelled',
+            in_array($status, ['pending', 'processing', 'in_transit', 'in_progress'], true) => 'pending',
+            default => $status !== '' ? $status : 'pending',
+        };
+    }
+
+    public function extractPayoutId(array $response): ?string
+    {
+        $id = $response['id'] ?? $response['data']['id'] ?? $response['payout_id'] ?? null;
+
+        return is_string($id) && $id !== '' ? $id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $body
+     * @param  array<string, mixed>  $credentials
+     */
+    public function injectSplitIdIntoBody(array &$body, array $credentials, ?string $splitId): void
+    {
+        if ($splitId) {
+            $body['split_id'] = $splitId;
+        }
     }
 }

@@ -389,7 +389,7 @@ const inputClass =
                 <!-- Aba Geral -->
                 <div v-show="activeTab === 'geral'" class="space-y-4">
                 <!-- Preço / Desconto -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -437,7 +437,7 @@ const inputClass =
                 </div>
 
                 <!-- Campos do formulário -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -487,7 +487,7 @@ const inputClass =
                 </div>
 
                 <!-- Aparência -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -603,7 +603,7 @@ const inputClass =
                 </div>
 
                 <!-- Cronômetro -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -647,7 +647,7 @@ const inputClass =
                 </div>
 
                 <!-- Notificações -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -694,7 +694,7 @@ const inputClass =
                 </div>
 
                 <!-- Vídeo YouTube -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -725,7 +725,7 @@ const inputClass =
                 </div>
 
                 <!-- Redirecionamento -->
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -754,7 +754,7 @@ const inputClass =
                 <!-- Aba Recursos -->
                 <div v-show="activeTab === 'recursos'" class="space-y-4">
                     <!-- SEO e Compartilhamento -->
-                    <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <button
                             type="button"
                             class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -796,7 +796,7 @@ const inputClass =
                         </div>
                     </div>
                     <!-- Rodapé do checkout -->
-                    <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <button
                             type="button"
                             class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -831,7 +831,7 @@ const inputClass =
                         </div>
                     </div>
                     <!-- Botão de suporte -->
-                    <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <button
                             type="button"
                             class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -892,7 +892,7 @@ const inputClass =
                         </div>
                     </div>
                     <!-- Exit popup -->
-                    <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <button
                             type="button"
                             class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -979,7 +979,7 @@ const inputClass =
 
                 <!-- Aba Template: lista de templates (Original + futuros via plugins) -->
                 <div v-show="activeTab === 'template'" class="space-y-4">
-                    <div class="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <p class="mb-5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Escolha o template do checkout</p>
                         <div class="grid gap-3 sm:grid-cols-2">
                             <button
@@ -1009,7 +1009,7 @@ const inputClass =
 
                 <!-- Aba Social -->
                 <div v-show="activeTab === 'social'" class="space-y-4">
-                    <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div class="panel-card-lg">
                         <div class="px-4 py-3 font-semibold text-zinc-900 dark:text-white">Provas sociais (avaliações)</div>
                         <div class="border-t border-zinc-200 px-4 py-4 dark:border-zinc-700">
                             <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
@@ -1190,7 +1190,7 @@ const inputClass =
             </div>
 
             <!-- Área direita: preview fixo (sem rolagem) -->
-            <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/50 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-table flex min-h-0 flex-1 flex-col">
                 <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 px-4 py-2 dark:border-zinc-700">
                     <div>
                         <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Preview em tempo real</p>
@@ -1248,7 +1248,7 @@ const inputClass =
                     >
                         <div
                             :class="[
-                                'rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-600 overflow-hidden',
+                                'panel-card overflow-hidden',
                                 previewViewMode === 'mobile'
                                     ? 'h-full w-[375px] max-h-full shrink-0 flex flex-col'
                                     : 'h-full w-full min-w-0',

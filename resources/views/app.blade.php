@@ -13,27 +13,53 @@
         (function(){try{var s=localStorage.getItem('theme');var t=s||'dark';document.documentElement.classList.toggle('dark',t==='dark');}catch(_){}})();
     </script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('getfy.app_name', config('app.name', 'Getfy')) }}</title>
+    @if(!empty($openGraph) && is_array($openGraph))
+        <title>{{ e($openGraph['title'] ?? config('getfy.app_name', config('app.name', 'Getfy'))) }}</title>
+        @if(!empty($openGraph['description']))
+            <meta name="description" content="{{ e($openGraph['description']) }}">
+        @endif
+        <meta property="og:type" content="{{ e($openGraph['type'] ?? 'website') }}">
+        <meta property="og:site_name" content="{{ e($openGraph['site_name'] ?? config('getfy.app_name', config('app.name', 'Getfy'))) }}">
+        <meta property="og:title" content="{{ e($openGraph['title'] ?? '') }}">
+        @if(!empty($openGraph['description']))
+            <meta property="og:description" content="{{ e($openGraph['description']) }}">
+        @endif
+        @if(!empty($openGraph['url']))
+            <meta property="og:url" content="{{ e($openGraph['url']) }}">
+            <link rel="canonical" href="{{ e($openGraph['url']) }}">
+        @endif
+        @if(!empty($openGraph['image']))
+            <meta property="og:image" content="{{ e($openGraph['image']) }}">
+            <meta property="og:image:secure_url" content="{{ e($openGraph['image']) }}">
+            <meta name="twitter:card" content="summary_large_image">
+            <meta name="twitter:title" content="{{ e($openGraph['title'] ?? '') }}">
+            @if(!empty($openGraph['description']))
+                <meta name="twitter:description" content="{{ e($openGraph['description']) }}">
+            @endif
+            <meta name="twitter:image" content="{{ e($openGraph['image']) }}">
+        @endif
+    @else
+        <title>{{ config('getfy.app_name', config('app.name', 'Getfy')) }}</title>
+    @endif
     @unless($skipPanelPwa)
     @php
-        $wlFavicon = config('getfy.favicon_url');
-        $wlFavicon = ($wlFavicon !== null && $wlFavicon !== '') ? $wlFavicon : 'https://cdn.getfy.cloud/collapsed-logo.png';
+        $wlFavicon = \App\Support\BrandFavicon::publicUrl();
         $wlThemeColor = config('getfy.pwa_theme_color');
         $wlThemeColor = ($wlThemeColor !== null && $wlThemeColor !== '') ? $wlThemeColor : config('getfy.theme_primary', '#0ea5e9');
-        $wlAppleIcon = config('getfy.pwa_icon_192');
+        $pwaIconPath = config('getfy.pwa_icon') ?: config('getfy.pwa_icon_192');
+        $wlAppleIcon = (is_string($pwaIconPath) && $pwaIconPath !== '' && is_file(public_path(ltrim($pwaIconPath, '/'))))
+            ? url('/'.ltrim($pwaIconPath, '/'))
+            : null;
     @endphp
-    <link rel="icon" href="{{ $wlFavicon }}" type="image/png">
+    <link rel="icon" href="{{ $wlFavicon }}" type="image/png" sizes="32x32">
+    <link rel="shortcut icon" href="{{ $wlFavicon }}" type="image/png">
     <link rel="manifest" href="{{ url('/manifest.json') }}">
     <meta name="theme-color" content="{{ $wlThemeColor }}">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    @if($wlAppleIcon !== null && $wlAppleIcon !== '')
+    @if($wlAppleIcon)
     <link rel="apple-touch-icon" href="{{ $wlAppleIcon }}">
-    @elseif(is_file(public_path('icons/icon-192x192.png')))
-    <link rel="apple-touch-icon" href="{{ url('/icons/icon-192x192.png') }}">
-    @elseif(is_file(public_path('icons/icon-512x512.png')))
-    <link rel="apple-touch-icon" href="{{ url('/icons/icon-512x512.png') }}">
     @endif
     <script>
         (function(){var e=null;window.addEventListener('beforeinstallprompt',function(t){t.preventDefault();e=t;window.__pwaInstallPrompt=e;},{capture:true});Object.defineProperty(window,'__pwaInstallPrompt',{get:function(){return e;},set:function(t){e=t;}});})();

@@ -4,6 +4,8 @@ import { Link, usePage } from '@inertiajs/vue3';
 import {
     LayoutDashboard,
     CircleDollarSign,
+    ShoppingCart,
+    Wallet,
     RotateCcw,
     Package,
     Repeat,
@@ -22,8 +24,10 @@ import {
     CodeXml,
 } from 'lucide-vue-next';
 import { useSidebar } from '@/composables/useSidebar';
+import { isNavItemActive } from '@/lib/nav';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import PwaInstallButton from '@/components/layout/PwaInstallButton.vue';
+import BetaBadge from '@/components/ui/BetaBadge.vue';
 
 const page = usePage();
 const { isExpanded, isMobileOpen, toggleSidebar, isMobile } = useSidebar();
@@ -69,44 +73,66 @@ const canView = (key) => {
     return !!perms.value?.[key];
 };
 
+const usesPartnerPanel = computed(() => !!page.props.auth?.uses_partner_panel);
+
 const navItems = computed(() => {
     const items = [];
+    const role = page.props.auth?.user?.role;
+    const isProducer = role === 'admin' || role === 'infoprodutor';
+    const partnerNavOnly = usesPartnerPanel.value && (role === 'coprodutor' || role === 'afiliado' || role === 'team');
 
-    // Core items com permissões (usuário de equipe)
-    if (canView('dashboard.view')) items.push({ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard });
-    if (canView('vendas.view')) items.push({ name: 'Vendas', href: '/vendas', icon: CircleDollarSign });
-    if (canView('reembolsos.view')) items.push({ name: 'Reembolsos', href: '/reembolsos', icon: RotateCcw });
-    if (canView('produtos.view')) items.push({ name: 'Produtos', href: '/produtos', icon: Package });
-    if (canView('relatorios.view')) items.push({ name: 'Relatórios', href: '/relatorios', icon: BarChart3 });
-    if (canView('integracoes.view')) items.push({ name: 'Integrações', href: '/integracoes', icon: Cable });
-    if (canView('email_marketing.view')) items.push({ name: 'E-mail Marketing', href: '/email-marketing', icon: Mail });
-
-    // Plugins: apenas admin/infoprodutor (backend reforça)
-    if ((page.props.auth?.user?.role === 'admin' || page.props.auth?.user?.role === 'infoprodutor') && pluginNavItems.value.length) {
-        items.push(...pluginNavItems.value);
+    if (partnerNavOnly) {
+        items.push(
+            { name: 'Dashboard', href: '/parceiro', icon: LayoutDashboard },
+            { name: 'Meus produtos', href: '/parceiro/produtos', icon: Package },
+            { name: 'Vendas', href: '/parceiro/vendas', icon: ShoppingCart },
+            { name: 'Financeiro', href: '/parceiro/financeiro', icon: Wallet, beta: true },
+        );
+        return items;
     }
 
-    // Usuários: admin vai para /usuarios (infoprodutores). Infoprodutor/equipe vai direto para a aba Equipe.
+    const groupOperacao = [];
+    if (canView('dashboard.view')) groupOperacao.push({ name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard });
+    if (canView('vendas.view')) groupOperacao.push({ name: 'Vendas', href: '/vendas', icon: CircleDollarSign });
+    if (canView('produtos.view')) groupOperacao.push({ name: 'Produtos', href: '/produtos', icon: Package });
+    if (canView('relatorios.view')) groupOperacao.push({ name: 'Relatórios', href: '/relatorios', icon: BarChart3 });
+    if (canView('reembolsos.view')) groupOperacao.push({ name: 'Reembolsos', href: '/reembolsos', icon: RotateCcw });
+    if (canView('financeiro.view')) {
+        groupOperacao.push({ name: 'Financeiro', href: '/financeiro', icon: Wallet, beta: true });
+    }
+
+    const groupFerramentas = [];
+    if (canView('integracoes.view')) groupFerramentas.push({ name: 'Integrações', href: '/integracoes', icon: Cable });
+    if (isProducer && pluginNavItems.value.length) {
+        groupFerramentas.push(...pluginNavItems.value);
+    }
+    if (canView('email_marketing.view')) {
+        groupFerramentas.push({ name: 'E-mail Marketing', href: '/email-marketing', icon: Mail });
+    }
     if (isAdmin.value) {
-        items.push({ name: 'Usuários / Equipe', href: '/usuarios', icon: Users });
-    } else if (page.props.auth?.user?.role === 'infoprodutor' || canView('equipe.manage')) {
-        items.push({ name: 'Equipe', href: '/usuarios/equipe', icon: Users });
+        groupFerramentas.push({ name: 'Usuários e equipe', href: '/usuarios', icon: Users });
+    } else if (role === 'infoprodutor' || canView('equipe.manage')) {
+        groupFerramentas.push({ name: 'Usuários e equipe', href: '/usuarios/equipe', icon: Users });
+    }
+    if (canView('api_pagamentos.view')) {
+        groupFerramentas.push({ name: 'API Pagamentos', href: '/aplicacoes-api', icon: CodeXml });
     }
 
-    if (canView('api_pagamentos.view')) items.push({ name: 'API Pagamentos', href: '/aplicacoes-api', icon: CodeXml });
-    items.push({ separator: true });
-    if (canView('configuracoes.view')) items.push({ name: 'Configurações', href: '/configuracoes', icon: Settings });
+    const groupSistema = [];
+    if (canView('configuracoes.view')) groupSistema.push({ name: 'Configurações', href: '/configuracoes', icon: Settings });
+    if (isProducer) groupSistema.push({ name: 'Plugins', href: '/gerenciar-plugins', icon: Plug });
 
-    if (page.props.auth?.user?.role === 'admin' || page.props.auth?.user?.role === 'infoprodutor') {
-        items.push({ name: 'Plugins', href: '/gerenciar-plugins', icon: Plug });
+    for (const group of [groupOperacao, groupFerramentas, groupSistema]) {
+        if (!group.length) continue;
+        if (items.length) items.push({ separator: true });
+        items.push(...group);
     }
+
     return items;
 });
 
 function isActive(href) {
-    const url = page.url;
-    if (href === '/dashboard') return url === '/dashboard' || url === '/';
-    return url === href || url.startsWith(href + '/');
+    return isNavItemActive(page.url, href);
 }
 
 /** Prefetch hover + mousedown para navegação do painel (Inertia v2). */
@@ -128,7 +154,7 @@ const panelNavPrefetch = ['hover', 'click'];
     >
         <div
             :class="[
-                'flex items-center border-b border-zinc-200/60 px-4 py-5 dark:border-zinc-700/60',
+                'flex items-center px-4 py-5',
                 showText() ? 'justify-between gap-2' : 'lg:justify-center',
             ]"
         >
@@ -140,8 +166,21 @@ const panelNavPrefetch = ['hover', 'click'];
                     class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-zinc-900 dark:text-white"
                 >
                     <template v-if="hasLogoFull()">
-                        <img v-if="appSettings().app_logo" :src="appSettings().app_logo" :alt="appName()" class="h-10 max-w-[200px] object-contain object-left" :class="appSettings().app_logo_dark ? 'dark:hidden' : ''" />
-                        <img v-if="appSettings().app_logo_dark" :src="appSettings().app_logo_dark" :alt="appName()" class="hidden h-10 max-w-[200px] object-contain object-left dark:block" />
+                        <div class="flex h-9 w-[148px] shrink-0 items-center justify-start">
+                            <img
+                                v-if="appSettings().app_logo"
+                                :src="appSettings().app_logo"
+                                :alt="appName()"
+                                class="max-h-9 max-w-[148px] object-contain object-left"
+                                :class="appSettings().app_logo_dark ? 'dark:hidden' : ''"
+                            />
+                            <img
+                                v-if="appSettings().app_logo_dark"
+                                :src="appSettings().app_logo_dark"
+                                :alt="appName()"
+                                class="hidden max-h-9 max-w-[148px] object-contain object-left dark:block"
+                            />
+                        </div>
                     </template>
                     <span v-else class="truncate text-lg font-semibold">{{ appName() }}</span>
                 </Link>
@@ -159,19 +198,33 @@ const panelNavPrefetch = ['hover', 'click'];
             <button
                 v-else
                 type="button"
-                class="flex h-14 w-14 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                class="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 aria-label="Expandir menu"
                 @click="toggleSidebar"
             >
                 <template v-if="hasLogoIcon()">
-                    <img v-if="appSettings().app_logo_icon" :src="appSettings().app_logo_icon" :alt="appName()" class="h-12 w-12 object-contain" :class="appSettings().app_logo_icon_dark ? 'dark:hidden' : ''" />
-                    <img v-if="appSettings().app_logo_icon_dark" :src="appSettings().app_logo_icon_dark" :alt="appName()" class="hidden h-12 w-12 object-contain dark:block" />
+                    <div class="flex h-8 w-8 items-center justify-center">
+                        <img
+                            v-if="appSettings().app_logo_icon"
+                            :src="appSettings().app_logo_icon"
+                            :alt="appName()"
+                            class="max-h-8 max-w-8 object-contain"
+                            :class="appSettings().app_logo_icon_dark ? 'dark:hidden' : ''"
+                        />
+                        <img
+                            v-if="appSettings().app_logo_icon_dark"
+                            :src="appSettings().app_logo_icon_dark"
+                            :alt="appName()"
+                            class="hidden max-h-8 max-w-8 object-contain dark:block"
+                        />
+                    </div>
                 </template>
-                <span v-else class="flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-200 text-lg font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
+                <span v-else class="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-200 text-sm font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">
                     {{ appName().charAt(0) }}
                 </span>
             </button>
         </div>
+        <hr class="mx-3 border-t border-zinc-200 dark:border-zinc-700" />
         <nav class="flex-1 overflow-y-auto no-scrollbar px-3 py-4">
             <ul class="flex flex-col gap-1">
                 <template v-for="(item, index) in navItems" :key="item.separator ? `sep-${index}` : (item.href ?? index)">
@@ -198,9 +251,10 @@ const panelNavPrefetch = ['hover', 'click'];
                             </span>
                             <span
                                 v-if="showText()"
-                                class="truncate"
+                                class="flex min-w-0 flex-1 items-center gap-1.5"
                             >
-                                {{ item.name }}
+                                <span class="truncate">{{ item.name }}</span>
+                                <BetaBadge v-if="item.beta" size="xs" />
                             </span>
                         </Link>
                     </li>

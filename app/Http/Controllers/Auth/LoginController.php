@@ -41,7 +41,14 @@ class LoginController extends Controller
             ]);
         }
 
-        return Inertia::render('Auth/Login');
+        $redirect = $request->query('redirect');
+        $safeRedirect = is_string($redirect) && $this->isSafeAffiliateEnrollRedirect($redirect)
+            ? $redirect
+            : null;
+
+        return Inertia::render('Auth/Login', [
+            'redirect' => $safeRedirect,
+        ]);
     }
 
     public function login(Request $request): RedirectResponse
@@ -83,7 +90,17 @@ class LoginController extends Controller
                     'user_agent' => (string) $request->userAgent(),
                 ]);
             }
+            $affiliateRedirect = $request->input('redirect') ?? $request->query('redirect');
+            if (is_string($affiliateRedirect) && $this->isSafeAffiliateEnrollRedirect($affiliateRedirect)) {
+                return redirect($affiliateRedirect);
+            }
+
             if ($user->canAccessPanel()) {
+                $usesPartnerPanel = app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user);
+                if ($usesPartnerPanel && ! $user->isAdmin() && ! $user->isInfoprodutor()) {
+                    return redirect()->intended('/parceiro');
+                }
+
                 return redirect()->intended('/dashboard');
             }
 
@@ -137,5 +154,18 @@ class LoginController extends Controller
 
         return (bool) preg_match('#^/m/[a-zA-Z0-9]{6,16}/login$#', $path)
             || $path === '/login';
+    }
+
+    private function isSafeAffiliateEnrollRedirect(string $path): bool
+    {
+        if ($path === '' || ! str_starts_with($path, '/') || str_starts_with($path, '//')) {
+            return false;
+        }
+        if (str_contains($path, '..')) {
+            return false;
+        }
+
+        return (bool) preg_match('#^/afiliar/[a-z0-9\-]+/cadastro$#', $path)
+            || (bool) preg_match('#^/convite/co-producao/[a-zA-Z0-9]+/cadastro$#', $path);
     }
 }

@@ -40,7 +40,7 @@ class PluginsController extends Controller
 
         $store = app(PluginStoreService::class);
         $pluginStore = [
-            'store_url' => rtrim(config('services.plugin_store.url', ''), '/'),
+            'store_url' => rtrim((string) config('getfy.plugin_store_url', 'https://store.getfy.cloud'), '/'),
             'submit_url' => $store->getSubmitPluginUrl(),
         ];
         $bundled = PluginRegistry::bundledPluginsPath();
@@ -71,7 +71,7 @@ class PluginsController extends Controller
     {
         $store = app(PluginStoreService::class);
         if (! $store->isConfigured()) {
-            return response()->json(['data' => [], 'error' => 'Loja não configurada. Defina PLUGIN_STORE_URL no .env (ex.: http://plugins-getfy.test).']);
+            return response()->json(['data' => [], 'error' => 'Loja de plugins indisponível.']);
         }
         $response = $store->listPlugins(
             $request->query('category') ?: null,

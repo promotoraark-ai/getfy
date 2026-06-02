@@ -57,6 +57,13 @@ function formatBRL(value) {
     return formatMoney(value, 'BRL');
 }
 
+function vendaDisplayAmount(v) {
+    if (v?.display_amount_is_producer_share && v.display_amount != null) {
+        return v.display_amount;
+    }
+    return v?.amount_total ?? v?.amount ?? 0;
+}
+
 function formatDate(value) {
     if (!value) return '–';
     const d = new Date(value);
@@ -172,12 +179,36 @@ function itemLabel(item) {
                                 <p class="text-sm text-zinc-900 dark:text-white">{{ venda.payment_type_label ?? 'Pagamento único' }}</p>
                             </div>
                             <div class="space-y-1">
-                                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Valor líquido</p>
-                                <p class="text-sm text-zinc-900 dark:text-white">{{ formatMoney(venda.amount_total ?? venda.amount, venda.currency) }}</p>
+                                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                    {{ venda.display_amount_is_producer_share ? 'Sua parte (líquido)' : 'Valor líquido' }}
+                                </p>
+                                <p class="text-sm text-zinc-900 dark:text-white">
+                                    {{ formatMoney(vendaDisplayAmount(venda), venda.currency) }}
+                                    <span
+                                        v-if="venda.display_amount_is_estimated"
+                                        class="text-xs font-normal text-zinc-500"
+                                        title="Estimativa até confirmação do pagamento"
+                                    > *</span>
+                                </p>
+                                <p
+                                    v-if="venda.display_amount_is_producer_share && venda.sale_gross_total != null"
+                                    class="text-xs text-zinc-500 dark:text-zinc-400"
+                                >
+                                    Valor total da venda: {{ formatMoney(venda.sale_gross_total, venda.currency) }}
+                                </p>
                             </div>
                             <div class="space-y-1">
                                 <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Produto</p>
                                 <p class="text-sm text-zinc-900 dark:text-white">{{ venda.product_display_name ?? venda.product?.name ?? '–' }}</p>
+                            </div>
+                            <div v-if="venda.is_affiliate_sale" class="space-y-1">
+                                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Afiliado</p>
+                                <p class="text-sm text-zinc-900 dark:text-white">
+                                    {{ venda.affiliate?.name ?? '—' }}
+                                    <span v-if="venda.affiliate?.code" class="mt-0.5 block font-mono text-xs text-zinc-500">
+                                        ref {{ venda.affiliate.code }}
+                                    </span>
+                                </p>
                             </div>
                             <div class="space-y-1">
                                 <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Método de pagamento</p>

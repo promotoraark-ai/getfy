@@ -25,6 +25,24 @@ export function formatCompactCurrency(value) {
 }
 
 /**
+ * Monta URL wa.me a partir do telefone do cliente.
+ * @param {string|null|undefined} phone
+ * @returns {string|null}
+ */
+export function whatsappUrlForPhone(phone) {
+    if (phone == null || String(phone).trim() === '') return null;
+    let digits = String(phone).replace(/\D/g, '');
+    if (digits.startsWith('0')) {
+        digits = digits.replace(/^0+/, '');
+    }
+    if (digits.length < 10) return null;
+    if (digits.length <= 11 && !digits.startsWith('55')) {
+        digits = `55${digits}`;
+    }
+    return `https://wa.me/${digits}`;
+}
+
+/**
  * Detecta o tipo de provedor de vídeo a partir da URL (para escolher player Vidstack vs iframe).
  * @param {string} url - URL do vídeo
  * @returns {'youtube'|'vimeo'|'native'}

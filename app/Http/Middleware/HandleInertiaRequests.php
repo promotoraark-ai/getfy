@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\BrandFavicon;
 use App\Models\MemberNotification;
 use App\Models\MemberPushSubscription;
 use App\Models\PanelNotification;
@@ -123,11 +124,16 @@ class HandleInertiaRequests extends Middleware
                     'role' => $user->role,
                     'avatar_url' => $user->avatar ? app(StorageService::class)->url($user->avatar) : null,
                 ] : null,
+                'uses_partner_panel' => $user ? app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user) : false,
                 'permissions' => ($user && $user->canAccessPanel())
-                    ? app(TeamAccessService::class)->permissionsFor($user)
+                    ? (app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user)
+                        ? app(\App\Services\PartnerAccessService::class)->permissionsFor($user)
+                        : app(TeamAccessService::class)->permissionsFor($user))
                     : [],
                 'allowed_product_ids' => ($user && $user->canAccessPanel())
-                    ? app(TeamAccessService::class)->allowedProductIdsFor($user)
+                    ? (app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user)
+                        ? app(\App\Services\PartnerAccessService::class)->allowedProductIdsFor($user)
+                        : app(TeamAccessService::class)->allowedProductIdsFor($user))
                     : [],
             ],
             'flash' => [
@@ -158,6 +164,7 @@ class HandleInertiaRequests extends Middleware
         if (! $skipPanelPwa) {
             $shared['pwa_manifest_url'] = url('/manifest.json');
             $shared['pwa_sw_url'] = url('/painel-sw.js');
+            $shared['pwa_sw_scope'] = '/painel/';
         }
 
         return $shared;
@@ -167,6 +174,10 @@ class HandleInertiaRequests extends Middleware
     {
         $titles = [
             'dashboard' => 'Dashboard',
+            'parceiro.dashboard' => 'Dashboard',
+            'parceiro.produtos.index' => 'Meus produtos',
+            'parceiro.vendas.index' => 'Vendas',
+            'parceiro.financeiro.index' => 'Financeiro',
             'vendas.index' => 'Vendas',
             'reembolsos.index' => 'Reembolsos',
             'produtos.index' => 'Produtos',
@@ -203,10 +214,9 @@ class HandleInertiaRequests extends Middleware
         $themePrimary = (string) config('getfy.theme_primary', '#00cc00');
         $pwaTheme = config('getfy.pwa_theme_color');
         $pwaTheme = ($pwaTheme !== null && $pwaTheme !== '') ? (string) $pwaTheme : $themePrimary;
-        $favicon = config('getfy.favicon_url');
-        $favicon = ($favicon !== null && $favicon !== '') ? (string) $favicon : 'https://cdn.getfy.cloud/collapsed-logo.png';
+        $favicon = BrandFavicon::publicUrl();
         $loginHero = config('getfy.login_hero_image');
-        $loginHero = ($loginHero !== null && $loginHero !== '') ? (string) $loginHero : 'https://cdn.getfy.cloud/login.webp';
+        $loginHero = ($loginHero !== null && $loginHero !== '') ? (string) $loginHero : 'https://cdn.getfy.cloud/login-v2.webp';
 
         return [
             'app_name' => (string) config('getfy.app_name', 'Getfy'),

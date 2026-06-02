@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, defineAsyncComponent } from 'vue';
+import { ref, computed, defineAsyncComponent, onMounted, watch } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import Button from '@/components/ui/Button.vue';
@@ -235,6 +235,38 @@ const currentTab = computed(() => {
 function setTab(tabId) {
     router.get('/integracoes', { tab: tabId }, { preserveState: true });
 }
+
+function parseIntegrationsSearch() {
+    const url = page.url;
+    const idx = url.indexOf('?');
+    return idx !== -1 ? new URLSearchParams(url.slice(idx)) : new URLSearchParams();
+}
+
+function syncGatewayFromQuery() {
+    const q = parseIntegrationsSearch();
+    const gateway = q.get('gateway');
+    if (!gateway) {
+        return;
+    }
+
+    const tab = q.get('tab');
+    if (tab !== 'gateways') {
+        router.get(
+            '/integracoes',
+            { tab: 'gateways', gateway },
+            { preserveState: true, replace: true },
+        );
+        return;
+    }
+
+    if (selectedGatewaySlug.value !== gateway || !gatewaySidebarOpen.value) {
+        openGatewaySidebar(gateway);
+    }
+}
+
+onMounted(() => syncGatewayFromQuery());
+
+watch(() => page.url, () => syncGatewayFromQuery());
 </script>
 
 <template>
@@ -283,7 +315,7 @@ function setTab(tabId) {
         <!-- Aba Gateways -->
         <template v-if="currentTab === 'gateways'">
             <section class="space-y-6">
-                <div class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <h2 class="mb-4 text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                         Gateways de pagamento
                     </h2>

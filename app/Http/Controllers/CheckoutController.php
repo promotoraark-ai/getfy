@@ -27,6 +27,7 @@ use App\Services\StorageService;
 use App\Services\CheckoutAbuseGuard;
 use App\Services\PaymentService;
 use App\Services\PushinPayPixRecorrenteService;
+use App\Support\CajuPayLocale;
 use App\Support\CheckoutCardContract;
 use App\Support\CheckoutCurrencyCatalog;
 use App\Support\CheckoutCustomPriceByCurrency;
@@ -366,7 +367,10 @@ class CheckoutController extends Controller
             ];
         })->values()->all();
 
-        $payload['conversion_pixels'] = $product->conversion_pixels ?? Product::defaultConversionPixels();
+        $payload['conversion_pixels'] = \App\Support\AffiliateAttribution::conversionPixelsForCheckout(
+            $product,
+            \App\Support\AffiliateAttribution::refFromRequest($request)
+        );
 
         $sessionToken = Str::uuid()->toString();
 
@@ -396,6 +400,8 @@ class CheckoutController extends Controller
         }
 
         $trackingMeta = $this->extractTrackingMetadataFromRequest($request);
+        $affiliateRef = \App\Support\AffiliateAttribution::refFromRequest($request);
+        $trackingMeta = \App\Support\AffiliateAttribution::mergeIntoTrackingMetadata($trackingMeta, $affiliateRef);
 
         CheckoutSession::create([
             'tenant_id' => $product->tenant_id,
@@ -412,13 +418,17 @@ class CheckoutController extends Controller
             'tracking_metadata' => $trackingMeta === [] ? null : $trackingMeta,
         ]);
         $payload['checkout_session_token'] = $sessionToken;
+        $payload['affiliate_ref'] = $affiliateRef;
 
         /** Preview ao vivo no Builder (iframe): o front confia neste flag, não só na query (Inertia pode alterar URL). */
         $payload['checkout_builder_preview'] = $request->query('preview') === '1';
 
         $payload['checkout_security'] = app(CheckoutAbuseGuard::class)->securityPropsForRequest($request, $product);
 
-        return Inertia::render('Checkout/Show', $payload);
+        return Inertia::render('Checkout/Show', $payload)
+            ->withViewData([
+                'openGraph' => \App\Support\CheckoutOpenGraph::forProduct($product, $config, $request),
+            ]);
     }
 
     public function validateCoupon(Request $request): JsonResponse
@@ -539,6 +549,7 @@ class CheckoutController extends Controller
             'utm_source' => ['nullable', 'string', 'max:255'],
             'utm_medium' => ['nullable', 'string', 'max:255'],
             'utm_campaign' => ['nullable', 'string', 'max:255'],
+            'affiliate_ref' => ['nullable', 'string', 'max:32'],
         ];
         $rules = array_merge($rules, $this->checkoutAttributionValidationRules());
         if ($request->input('payment_method') === 'card') {
@@ -724,6 +735,20 @@ class CheckoutController extends Controller
             $orderMetadata['access_password_temp'] = encrypt($plainPassword);
         }
 
+        $checkoutSessionForAttribution = null;
+        $sessionTokenForAttribution = trim((string) ($validated['checkout_session_token'] ?? ''));
+        if ($sessionTokenForAttribution !== '') {
+            $checkoutSessionForAttribution = CheckoutSession::where('session_token', $sessionTokenForAttribution)->first();
+        }
+        $affiliateRefForOrder = \App\Support\AffiliateAttribution::resolveRefForOrder(
+            $validated['affiliate_ref'] ?? null,
+            $checkoutSessionForAttribution
+        );
+        $orderMetadata = array_merge(
+            $orderMetadata,
+            \App\Support\AffiliateAttribution::metadataAttributes($product, $affiliateRefForOrder)
+        );
+
         $orderPayload = [
             'tenant_id' => $tenantId,
             'user_id' => $user->id,
@@ -771,7 +796,7 @@ class CheckoutController extends Controller
             $order->grantPurchasedProductAccessToBuyer();
         };
 
-        $updateCheckoutSession = function (Order $order) use ($validated) {
+        $updateCheckoutSession = function (Order $order) use ($validated, $product) {
             $utmFromRequest = $this->utmPayloadFromValidated($validated);
             $trackingFromRequest = $this->trackingPayloadFromValidated($validated);
             $token = $validated['checkout_session_token'] ?? null;
@@ -787,12 +812,28 @@ class CheckoutController extends Controller
                     $this->persistOrderUtms($order, $mergedUtms);
                     $this->persistOrderTrackingMetadata($order, $mergedTracking);
                     $order->syncUtmMetadataFromCheckoutSession();
+                    \App\Support\AffiliateAttribution::persistOnOrder(
+                        $order,
+                        $product,
+                        \App\Support\AffiliateAttribution::resolveRefForOrder(
+                            $validated['affiliate_ref'] ?? null,
+                            $session
+                        )
+                    );
 
                     return;
                 }
             }
             $this->persistOrderUtms($order, $utmFromRequest);
             $this->persistOrderTrackingMetadata($order, $trackingFromRequest);
+            \App\Support\AffiliateAttribution::persistOnOrder(
+                $order,
+                $product,
+                \App\Support\AffiliateAttribution::resolveRefForOrder(
+                    $validated['affiliate_ref'] ?? null,
+                    null
+                )
+            );
         };
 
         if ($paymentMethod === 'pix') {
@@ -1453,12 +1494,26 @@ class CheckoutController extends Controller
             'billing_country' => ['nullable', 'string', 'size:2'],
             'currency_user_selected' => ['nullable', 'boolean'],
             'coupon_code' => ['nullable', 'string', 'max:64'],
+            'checkout_locale' => ['nullable', 'string', Rule::in(['pt_BR', 'en', 'es'])],
             'utm_source' => ['nullable', 'string', 'max:255'],
             'utm_medium' => ['nullable', 'string', 'max:255'],
             'utm_campaign' => ['nullable', 'string', 'max:255'],
         ];
         $rules = array_merge($rules, $this->checkoutAttributionValidationRules());
         $validated = $request->validate($rules);
+
+        $checkoutLocaleKey = trim((string) ($validated['checkout_locale'] ?? ''));
+        if ($checkoutLocaleKey === '') {
+            $productConfig = is_array($product->checkout_config) ? $product->checkout_config : [];
+            $force = $productConfig['checkout_force'] ?? [];
+            $forcedLocale = is_array($force) ? trim((string) ($force['locale'] ?? '')) : '';
+            if ($forcedLocale !== '' && in_array($forcedLocale, ['pt_BR', 'en', 'es'], true)) {
+                $checkoutLocaleKey = $forcedLocale;
+            } else {
+                $checkoutLocaleKey = 'pt_BR';
+            }
+        }
+        $cajupayLocale = CajuPayLocale::fromCheckoutLocale($checkoutLocaleKey);
 
         $displayCurrency = strtoupper((string) ($validated['display_currency'] ?? 'BRL'));
         if ($displayCurrency === '') {
@@ -1548,7 +1603,8 @@ class CheckoutController extends Controller
                 $externalRef,
                 [], // sem consumer; será informado no confirm via initialPayer ou colhido pelo SDK
                 $allowedMethods,
-                $defaultMethodMap[$method] ?? 'card'
+                $defaultMethodMap[$method] ?? 'card',
+                $cajupayLocale
             );
         } catch (\Throwable $e) {
             Log::warning('CajuPaySession: falha ao criar sessão SDK', [
@@ -2257,7 +2313,12 @@ class CheckoutController extends Controller
         $amountFormatted = 'R$ ' . number_format($amount, 2, ',', '.');
 
         $product = $order->product;
-        $conversionPixels = $product ? ($product->conversion_pixels ?? Product::defaultConversionPixels()) : Product::defaultConversionPixels();
+        $conversionPixels = $product
+            ? \App\Support\AffiliateAttribution::conversionPixelsForCheckout(
+                $product,
+                \App\Support\AffiliateAttribution::affiliateCodeFromOrderMetadata(is_array($order->metadata) ? $order->metadata : null)
+            )
+            : Product::defaultConversionPixels();
         if ($order->api_application_id) {
             $order->loadMissing('apiApplication');
             if ($order->apiApplication?->conversion_pixels) {
@@ -2313,7 +2374,12 @@ class CheckoutController extends Controller
         }
 
         $product = $order->product;
-        $conversionPixels = $product ? ($product->conversion_pixels ?? Product::defaultConversionPixels()) : Product::defaultConversionPixels();
+        $conversionPixels = $product
+            ? \App\Support\AffiliateAttribution::conversionPixelsForCheckout(
+                $product,
+                \App\Support\AffiliateAttribution::affiliateCodeFromOrderMetadata(is_array($order->metadata) ? $order->metadata : null)
+            )
+            : Product::defaultConversionPixels();
         if ($order->api_application_id) {
             $order->loadMissing('apiApplication');
             if ($order->apiApplication?->conversion_pixels) {

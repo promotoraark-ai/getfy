@@ -96,14 +96,14 @@ function confirmSend(campaign) {
                 configurado automaticamente.
             </div>
 
-            <div v-if="campaigns.length === 0" class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-8 text-center dark:bg-zinc-800/50">
+            <div v-if="campaigns.length === 0" class="panel-card p-8 text-center">
                 <p class="text-zinc-600 dark:text-zinc-400">Nenhuma campanha ainda.</p>
                 <Link href="/email-marketing/create" class="mt-4 inline-block">
                     <Button variant="primary">Criar primeira campanha</Button>
                 </Link>
             </div>
 
-            <div v-else class="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800/50">
+            <div v-else class="panel-table">
                 <ul class="divide-y divide-zinc-200 dark:divide-zinc-700">
                     <li
                         v-for="c in campaigns"
@@ -155,7 +155,7 @@ function confirmSend(campaign) {
                 </p>
             </div>
 
-            <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-4 dark:bg-zinc-800/50">
+            <div class="panel-card-sm">
                 <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">Status</h2>
                 <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                     A plataforma verifica automaticamente se o cron e a fila estão rodando (atualizado a cada minuto).
@@ -210,7 +210,7 @@ function confirmSend(campaign) {
                 </div>
             </div>
 
-            <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white p-4 dark:bg-zinc-800/50">
+            <div class="panel-card-sm">
                 <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">Como configurar</h2>
                 <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                     Para os e-mails serem enviados em lotes de 30 por minuto, configure o crontab para rodar o agendador a cada minuto e mantenha o worker de fila ativo. A linha abaixo deve ser adicionada ao crontab (<code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">crontab -e</code>), não executada no terminal.

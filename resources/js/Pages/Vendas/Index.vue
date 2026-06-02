@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
+import { whatsappUrlForPhone } from '@/lib/utils';
 import VendasTabs from '@/components/vendas/VendasTabs.vue';
 import VendaDetailSidebar from '@/components/vendas/VendaDetailSidebar.vue';
 import {
@@ -20,6 +21,8 @@ import {
     RotateCcw,
     Search,
     X,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutInfoprodutor });
@@ -34,6 +37,39 @@ const props = defineProps({
 });
 
 const vendasList = computed(() => props.vendas?.data ?? props.vendas ?? []);
+
+const paginationPrev = computed(() => props.vendas?.links?.[0] ?? null);
+const paginationNext = computed(() => {
+    const links = props.vendas?.links ?? [];
+    return links.length > 1 ? links[links.length - 1] : null;
+});
+const paginationPages = computed(() => {
+    const links = props.vendas?.links ?? [];
+    if (links.length <= 2) return [];
+    return links.slice(1, -1);
+});
+const paginationSummary = computed(() => {
+    const current = props.vendas?.current_page ?? 1;
+    const last = props.vendas?.last_page ?? 1;
+    return `${current} / ${last}`;
+});
+
+function visitPaginationPage(url) {
+    if (!url) return;
+    router.visit(url, { preserveState: true });
+}
+
+function paginationLinkClass(link, { iconOnly = false } = {}) {
+    return [
+        'relative inline-flex shrink-0 items-center justify-center rounded-lg text-sm font-medium transition',
+        iconOnly ? 'h-9 w-9' : 'min-w-9 px-3 py-2',
+        link?.active
+            ? 'z-10 bg-[var(--color-primary)] text-white'
+            : link?.url
+              ? 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700'
+              : 'cursor-not-allowed text-zinc-400 dark:text-zinc-500',
+    ];
+}
 
 const valuesVisible = ref(true);
 const sidebarOpen = ref(false);
@@ -163,12 +199,23 @@ function displayCurrency(value) {
     return valuesVisible.value ? formatBRL(value) : '••••••';
 }
 
+function vendaDisplayAmount(v) {
+    if (v?.display_amount_is_producer_share && v.display_amount != null) {
+        return v.display_amount;
+    }
+    return v?.amount_total ?? v?.amount ?? 0;
+}
+
 function displayMoney(value, currency = 'BRL') {
     return valuesVisible.value ? formatMoney(value, currency) : '••••••';
 }
 
 function displayNumber(value) {
     return valuesVisible.value ? String(value) : '—';
+}
+
+function whatsappUrl(venda) {
+    return whatsappUrlForPhone(venda?.phone);
 }
 
 function statusBadgeClass(status) {
@@ -444,7 +491,7 @@ function openProofExport() {
             </div>
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-md"
                 >
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                         <ShoppingCart class="h-5 w-5" />
@@ -455,7 +502,7 @@ function openProofExport() {
                     </p>
                 </div>
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-md"
                 >
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                         <CircleDollarSign class="h-5 w-5" />
@@ -475,7 +522,7 @@ function openProofExport() {
                     </p>
                 </div>
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-md"
                 >
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                         <Banknote class="h-5 w-5" />
@@ -486,7 +533,7 @@ function openProofExport() {
                     </p>
                 </div>
                 <div
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                    class="panel-card-md"
                 >
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                         <CreditCard class="h-5 w-5" />
@@ -695,7 +742,7 @@ function openProofExport() {
             <div
                 v-for="v in vendasList"
                 :key="v.id"
-                class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/80"
+                class="panel-card-sm transition hover:opacity-95 dark:hover:opacity-95"
                 role="button"
                 tabindex="0"
                 @click="openDetail(v)"
@@ -710,17 +757,39 @@ function openProofExport() {
                         <p class="mt-1 break-words text-sm font-semibold leading-snug text-zinc-900 dark:text-white">
                             {{ v.product_display_name ?? v.product?.name ?? '–' }}
                         </p>
-                    </div>
-                    <div class="shrink-0" :data-venda-menu="v.id" @click.stop>
-                        <button
-                            type="button"
-                            class="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                            aria-label="Abrir menu"
-                            aria-expanded="openMenuId === v.id"
-                            @click="toggleMenu(v.id, $event)"
+                        <p
+                            v-if="v.is_affiliate_sale"
+                            class="mt-1 inline-flex max-w-full flex-wrap items-center gap-1 text-xs text-violet-700 dark:text-violet-300"
                         >
-                            <MoreVertical class="h-4 w-4" />
-                        </button>
+                            <span class="rounded-full bg-violet-100 px-2 py-0.5 font-medium dark:bg-violet-950/50">Afiliado</span>
+                            <span v-if="v.affiliate?.name" class="truncate">{{ v.affiliate.name }}</span>
+                            <span v-else-if="v.affiliate?.code" class="font-mono">{{ v.affiliate.code }}</span>
+                        </p>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-1" @click.stop>
+                        <a
+                            v-if="whatsappUrl(v)"
+                            :href="whatsappUrl(v)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="flex h-9 w-9 items-center justify-center rounded-lg text-[#25D366] transition hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                            :aria-label="`WhatsApp de ${v.user?.name ?? 'cliente'}`"
+                        >
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                            </svg>
+                        </a>
+                        <div class="relative" :data-venda-menu="v.id">
+                            <button
+                                type="button"
+                                class="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                                aria-label="Abrir menu"
+                                aria-expanded="openMenuId === v.id"
+                                @click="toggleMenu(v.id, $event)"
+                            >
+                                <MoreVertical class="h-4 w-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -760,7 +829,13 @@ function openProofExport() {
                                 Valor líquido
                             </p>
                             <p class="text-base font-semibold tabular-nums text-zinc-900 dark:text-white">
-                                {{ displayMoney(v.amount_total ?? v.amount, v.currency) }}
+                                {{ displayMoney(vendaDisplayAmount(v), v.currency) }}
+                            </p>
+                            <p
+                                v-if="v.display_amount_is_producer_share && v.sale_gross_total != null"
+                                class="text-[11px] text-zinc-500 dark:text-zinc-400"
+                            >
+                                Venda {{ displayMoney(v.sale_gross_total, v.currency) }}
                             </p>
                         </div>
                     </div>
@@ -769,13 +844,13 @@ function openProofExport() {
 
             <div
                 v-if="!vendasList.length"
-                class="rounded-xl border border-zinc-200 bg-white px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400"
+                class="panel-card px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400"
             >
                 Nenhuma venda encontrada.
             </div>
         </div>
 
-        <div class="hidden overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-800/80 sm:block">
+        <div class="hidden panel-table sm:block">
             <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
                 <thead class="bg-zinc-50 dark:bg-zinc-800">
                     <tr>
@@ -804,7 +879,7 @@ function openProofExport() {
                         >
                             Valor líquido
                         </th>
-                        <th class="relative w-12 px-2 py-3">
+                        <th class="relative w-20 px-2 py-3">
                             <span class="sr-only">Ações</span>
                         </th>
                     </tr>
@@ -813,14 +888,22 @@ function openProofExport() {
                     <tr
                         v-for="v in vendasList"
                         :key="v.id"
-                        class="cursor-pointer bg-white transition hover:bg-zinc-50 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/80"
+                        class="cursor-pointer transition hover:bg-zinc-100/80 dark:hover:bg-zinc-700/50"
                         @click="openDetail(v)"
                     >
                         <td class="whitespace-nowrap px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
                             {{ new Date(v.created_at).toLocaleDateString('pt-BR') }}
                         </td>
                         <td class="px-4 py-3 text-sm text-zinc-900 dark:text-white">
-                            {{ v.product_display_name ?? v.product?.name ?? '–' }}
+                            <p>{{ v.product_display_name ?? v.product?.name ?? '–' }}</p>
+                            <p
+                                v-if="v.is_affiliate_sale"
+                                class="mt-1 flex flex-wrap items-center gap-1 text-xs text-violet-700 dark:text-violet-300"
+                            >
+                                <span class="rounded-full bg-violet-100 px-2 py-0.5 font-medium dark:bg-violet-950/50">Afiliado</span>
+                                <span v-if="v.affiliate?.name">{{ v.affiliate.name }}</span>
+                                <span v-else-if="v.affiliate?.code" class="font-mono">{{ v.affiliate.code }}</span>
+                            </p>
                         </td>
                         <td class="px-4 py-3">
                             <div class="flex flex-col gap-0.5">
@@ -848,19 +931,39 @@ function openProofExport() {
                             </div>
                         </td>
                         <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900 dark:text-white">
-                            {{ displayMoney(v.amount_total ?? v.amount, v.currency) }}
+                            <p>{{ displayMoney(vendaDisplayAmount(v), v.currency) }}</p>
+                            <p
+                                v-if="v.display_amount_is_producer_share && v.sale_gross_total != null"
+                                class="text-xs font-normal text-zinc-500 dark:text-zinc-400"
+                            >
+                                Venda {{ displayMoney(v.sale_gross_total, v.currency) }}
+                            </p>
                         </td>
                         <td class="relative whitespace-nowrap px-2 py-3" @click.stop>
-                            <div class="relative" :data-venda-menu="v.id">
-                                <button
-                                    type="button"
-                                    class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
-                                    aria-label="Abrir menu"
-                                    aria-expanded="openMenuId === v.id"
-                                    @click="toggleMenu(v.id, $event)"
+                            <div class="flex items-center justify-end gap-1">
+                                <a
+                                    v-if="whatsappUrl(v)"
+                                    :href="whatsappUrl(v)"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="flex h-8 w-8 items-center justify-center rounded-lg text-[#25D366] transition hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                                    :aria-label="`WhatsApp de ${v.user?.name ?? 'cliente'}`"
                                 >
-                                    <MoreVertical class="h-4 w-4" />
-                                </button>
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                                    </svg>
+                                </a>
+                                <div class="relative" :data-venda-menu="v.id">
+                                    <button
+                                        type="button"
+                                        class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+                                        aria-label="Abrir menu"
+                                        aria-expanded="openMenuId === v.id"
+                                        @click="toggleMenu(v.id, $event)"
+                                    >
+                                        <MoreVertical class="h-4 w-4" />
+                                    </button>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -876,26 +979,52 @@ function openProofExport() {
         <!-- Paginação -->
         <nav
             v-if="vendas?.links?.length > 3"
-            class="flex items-center justify-center gap-2"
+            class="flex w-full items-center gap-2"
             aria-label="Paginação"
         >
-            <a
-                v-for="link in vendas.links"
-                :key="link.label"
-                :href="link.url"
-                :aria-current="link.active ? 'page' : undefined"
-                :aria-disabled="!link.url"
-                :class="[
-                    'relative inline-flex items-center rounded-lg px-3 py-2 text-sm font-medium transition',
-                    link.active
-                        ? 'z-10 bg-[var(--color-primary)] text-white'
-                        : link.url
-                          ? 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700'
-                          : 'cursor-not-allowed text-zinc-400 dark:text-zinc-500',
-                ]"
-                v-html="link.label"
-                @click.prevent="link.url && router.visit(link.url, { preserveState: true })"
-            />
+            <button
+                type="button"
+                :disabled="!paginationPrev?.url"
+                :class="paginationLinkClass(paginationPrev, { iconOnly: true })"
+                aria-label="Página anterior"
+                @click="visitPaginationPage(paginationPrev?.url)"
+            >
+                <ChevronLeft class="h-5 w-5" aria-hidden="true" />
+            </button>
+
+            <span class="min-w-0 flex-1 text-center text-sm font-medium text-zinc-600 dark:text-zinc-400 sm:hidden">
+                {{ paginationSummary }}
+            </span>
+
+            <div class="hidden min-w-0 flex-1 items-center justify-center gap-1 overflow-x-auto no-scrollbar sm:flex">
+                <template v-for="(link, index) in paginationPages" :key="`page-${index}-${link.label}`">
+                    <span
+                        v-if="link.label === '...'"
+                        class="inline-flex min-w-9 items-center justify-center px-2 py-2 text-sm text-zinc-400 dark:text-zinc-500"
+                        aria-hidden="true"
+                    >…</span>
+                    <button
+                        v-else
+                        type="button"
+                        :disabled="!link.url"
+                        :aria-current="link.active ? 'page' : undefined"
+                        :class="paginationLinkClass(link)"
+                        @click="visitPaginationPage(link.url)"
+                    >
+                        {{ link.label }}
+                    </button>
+                </template>
+            </div>
+
+            <button
+                type="button"
+                :disabled="!paginationNext?.url"
+                :class="paginationLinkClass(paginationNext, { iconOnly: true })"
+                aria-label="Próxima página"
+                @click="visitPaginationPage(paginationNext?.url)"
+            >
+                <ChevronRight class="h-5 w-5" aria-hidden="true" />
+            </button>
         </nav>
 
         <!-- Sidebar de detalhes -->

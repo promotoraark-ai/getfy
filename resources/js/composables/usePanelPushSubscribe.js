@@ -1,61 +1,61 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import axios from 'axios';
-import { usePage } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
+import {
+    ensurePushSubscription,
+    attachServiceWorkerPushListeners,
+} from '@/lib/pushSubscription';
 
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
-}
+const PANEL_SW_SCRIPT = '/painel-sw.js';
+const PANEL_SW_SCOPE = '/painel/';
+const PANEL_PUSH_SUBSCRIBE_URL = '/painel/push-subscribe';
+
+let inertiaHealListenerRegistered = false;
+let ensureDebounceTimer = null;
 
 /**
- * Registra o Service Worker do painel e subscribe para push.
- * Usar no AppLayout - usa push_enabled e vapid_public das props compartilhadas.
+ * Registra o Service Worker do painel e subscribe para push com auto-cura após deploy.
  */
 export function usePanelPushSubscribe() {
     const page = usePage();
     const pushEnabled = computed(() => !!page.props.push_enabled);
     const vapidPublic = computed(() => page.props.vapid_public ?? null);
+    const swScope = computed(() => page.props.pwa_sw_scope ?? PANEL_SW_SCOPE);
     const pushSubscribing = ref(false);
     const pushRegistered = ref(false);
     const lastPushError = ref(null);
 
-    function serializeSubscription(sub) {
-        const p256dh = sub?.getKey?.('p256dh');
-        const auth = sub?.getKey?.('auth');
-        return {
-            endpoint: sub?.endpoint,
-            keys: {
-                p256dh: p256dh ? btoa(String.fromCharCode.apply(null, new Uint8Array(p256dh))) : '',
-                auth: auth ? btoa(String.fromCharCode.apply(null, new Uint8Array(auth))) : '',
-            },
-        };
-    }
-
-    async function syncSubscriptionToServer(sub) {
-        const payload = serializeSubscription(sub);
-        if (!payload.endpoint || !payload.keys?.p256dh || !payload.keys?.auth) return false;
-        const { data } = await axios.post('/painel/push-subscribe', payload);
+    async function syncSubscriptionToServer(payload) {
+        const { data } = await axios.post(PANEL_PUSH_SUBSCRIBE_URL, payload);
         return !!data?.success;
     }
 
-    async function registerAndSubscribe() {
-        lastPushError.value = null;
-        pushRegistered.value = false;
-        if (typeof navigator === 'undefined' || !navigator.serviceWorker) {
-            lastPushError.value = 'service_worker_unavailable';
+    async function runEnsure({ forceRenew = false } = {}) {
+        if (!pushEnabled.value || !vapidPublic.value) {
+            lastPushError.value = 'push_not_configured';
+            pushRegistered.value = false;
             return false;
         }
 
-        try {
-            // Scope restrito evita registros legados em '/' (isso pode quebrar no Android após updates).
-            await navigator.serviceWorker.register('/painel-sw.js', { scope: '/painel/' });
-        } catch (e) {
-            console.warn('Panel SW registration failed:', e);
-            lastPushError.value = 'service_worker_registration_failed';
+        const result = await ensurePushSubscription({
+            swScriptUrl: PANEL_SW_SCRIPT,
+            swScope: swScope.value,
+            vapidPublic: vapidPublic.value,
+            forceRenew,
+            syncToServer: syncSubscriptionToServer,
+        });
+
+        pushRegistered.value = result.ok;
+        lastPushError.value = result.ok ? null : result.reason;
+        return result.ok;
+    }
+
+    async function registerAndSubscribe({ forceRenew = false } = {}) {
+        lastPushError.value = null;
+        pushRegistered.value = false;
+
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker) {
+            lastPushError.value = 'service_worker_unavailable';
             return false;
         }
 
@@ -63,6 +63,7 @@ export function usePanelPushSubscribe() {
             lastPushError.value = 'push_not_configured';
             return false;
         }
+
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
             lastPushError.value = 'notification_permission_default';
             return false;
@@ -71,73 +72,75 @@ export function usePanelPushSubscribe() {
             lastPushError.value = 'notification_permission_denied';
             return false;
         }
-        if (pushSubscribing.value) return false;
-        if (pushRegistered.value) return true;
+
+        if (pushSubscribing.value) {
+            return false;
+        }
 
         pushSubscribing.value = true;
         try {
-            const reg = await navigator.serviceWorker.getRegistration('/painel/');
-            if (!reg) {
-                lastPushError.value = 'service_worker_not_found';
-                return false;
-            }
-            const existing = await reg.pushManager?.getSubscription?.();
-            if (existing) {
-                const synced = await syncSubscriptionToServer(existing);
-                pushRegistered.value = synced;
-                if (!synced) lastPushError.value = 'subscription_sync_failed';
-                return synced;
-            }
-            const sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(vapidPublic.value),
+            const reg = await navigator.serviceWorker.register(PANEL_SW_SCRIPT, { scope: swScope.value });
+            attachServiceWorkerPushListeners(reg, () => {
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    runEnsure({ forceRenew: true }).catch(() => {});
+                }
             });
-            const synced = await syncSubscriptionToServer(sub);
-            pushRegistered.value = synced;
-            if (!synced) lastPushError.value = 'subscription_sync_failed';
-            return synced;
+            return await runEnsure({ forceRenew });
         } catch (e) {
-            if (e?.name === 'NotAllowedError') {
-                lastPushError.value = 'notification_permission_denied';
-                return false;
-            }
-            lastPushError.value = 'subscription_failed';
             console.warn('Panel push subscribe failed:', e);
+            lastPushError.value = 'subscription_failed';
             return false;
         } finally {
             pushSubscribing.value = false;
         }
     }
 
-    /** Apenas verifica se já existe subscription no browser e atualiza pushRegistered (sem POST). Útil ao reabrir o app. */
-    async function checkExistingSubscription() {
-        lastPushError.value = null;
-        pushRegistered.value = false;
-        if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistration) return;
-        if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') return false;
-        try {
-            await navigator.serviceWorker.register('/painel-sw.js', { scope: '/painel/' });
-            const reg = await navigator.serviceWorker.getRegistration('/painel/');
-            const existing = await reg?.pushManager?.getSubscription?.();
-            if (existing) {
-                const synced = await syncSubscriptionToServer(existing);
-                pushRegistered.value = synced;
-                if (!synced) {
-                    lastPushError.value = 'subscription_sync_failed';
-                }
-                return synced;
-            }
+    async function checkExistingSubscription({ forceRenew = false } = {}) {
+        if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistration) {
             return false;
-        } catch (_) {}
-        return false;
+        }
+        if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+            pushRegistered.value = false;
+            return false;
+        }
+        if (!pushEnabled.value || !vapidPublic.value) {
+            return false;
+        }
+
+        pushSubscribing.value = true;
+        try {
+            const reg = await navigator.serviceWorker.register(PANEL_SW_SCRIPT, { scope: swScope.value });
+            attachServiceWorkerPushListeners(reg, () => {
+                runEnsure({ forceRenew: true }).catch(() => {});
+            });
+            return await runEnsure({ forceRenew });
+        } catch (_) {
+            return false;
+        } finally {
+            pushSubscribing.value = false;
+        }
+    }
+
+    /** Força nova inscrição (ex.: após deploy ou falha persistente). */
+    async function reactivatePush() {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            const result = await Notification.requestPermission();
+            if (result !== 'granted') {
+                lastPushError.value = 'notification_permission_denied';
+                return false;
+            }
+        }
+        return registerAndSubscribe({ forceRenew: true });
     }
 
     const notificationPermission = computed(() =>
-        typeof Notification !== 'undefined' ? Notification.permission : 'default'
+        typeof Notification !== 'undefined' ? Notification.permission : 'default',
     );
 
     const isStandalone = computed(() => {
-        if (typeof window === 'undefined') return false;
+        if (typeof window === 'undefined') {
+            return false;
+        }
         return (
             window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone === true ||
@@ -147,8 +150,18 @@ export function usePanelPushSubscribe() {
 
     let permissionCheckInterval = null;
 
+    function scheduleEnsureFromNavigation() {
+        if (ensureDebounceTimer) {
+            clearTimeout(ensureDebounceTimer);
+        }
+        ensureDebounceTimer = setTimeout(() => {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                checkExistingSubscription().catch(() => {});
+            }
+        }, 2000);
+    }
+
     onMounted(() => {
-        // Em standalone com permissão "default", não inscrever de imediato; quando o usuário permitir, inscrever
         if (isStandalone.value && notificationPermission.value === 'default') {
             permissionCheckInterval = setInterval(() => {
                 if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
@@ -165,14 +178,22 @@ export function usePanelPushSubscribe() {
                     permissionCheckInterval = null;
                 }
             }, 60000);
-            return;
+        } else {
+            registerAndSubscribe();
         }
-        registerAndSubscribe();
+
+        if (!inertiaHealListenerRegistered) {
+            inertiaHealListenerRegistered = true;
+            router.on('success', () => scheduleEnsureFromNavigation());
+        }
     });
 
     onUnmounted(() => {
         if (permissionCheckInterval) {
             clearInterval(permissionCheckInterval);
+        }
+        if (ensureDebounceTimer) {
+            clearTimeout(ensureDebounceTimer);
         }
     });
 
@@ -184,5 +205,6 @@ export function usePanelPushSubscribe() {
         isStandalone,
         registerAndSubscribe,
         checkExistingSubscription,
+        reactivatePush,
     };
 }

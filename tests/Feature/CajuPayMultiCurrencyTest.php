@@ -415,4 +415,99 @@ class CajuPayMultiCurrencyTest extends TestCase
         $this->assertSame('google_pay', $meta['checkout_payment_method'] ?? null);
         $this->assertSame($sessionId, $meta['cajupay_checkout_session_id'] ?? null);
     }
+
+    public function test_cajupay_session_sends_locale_en_to_api(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        Http::fake([
+            '*/api/sdk/v1/checkout/sessions' => Http::response([
+                'token' => 'tok_en',
+                'checkout_session_id' => 'sess-en-1',
+            ], 201),
+            '*/api/sdk/public/checkout/sessions/*' => Http::response(['methods_available' => ['card']], 200),
+        ]);
+
+        User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 1]);
+
+        $product = $this->createTestProduct([
+            'price' => 50,
+            'checkout_config' => array_merge(Product::defaultCheckoutConfig(), [
+                'payment_gateways' => ['card' => 'cajupay'],
+            ]),
+        ]);
+
+        $cred = GatewayCredential::create([
+            'tenant_id' => 1,
+            'gateway_slug' => 'cajupay',
+            'credentials' => '',
+            'is_connected' => true,
+        ]);
+        $cred->setEncryptedCredentials(['public_key' => 'pk_test', 'secret_key' => 'sk_test']);
+        $cred->save();
+
+        $response = $this->postJson(route('checkout.cajupay.session'), [
+            'product_id' => $product->id,
+            'payment_method' => 'card',
+            'checkout_locale' => 'en',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('success', true);
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), '/api/sdk/v1/checkout/sessions')) {
+                return false;
+            }
+
+            return ($request->data()['locale'] ?? null) === 'en';
+        });
+    }
+
+    public function test_cajupay_session_maps_pt_br_locale_to_bcp47(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        Http::fake([
+            '*/api/sdk/v1/checkout/sessions' => Http::response([
+                'token' => 'tok_pt',
+                'checkout_session_id' => 'sess-pt-1',
+            ], 201),
+            '*/api/sdk/public/checkout/sessions/*' => Http::response(['methods_available' => ['card']], 200),
+        ]);
+
+        User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 1]);
+
+        $product = $this->createTestProduct([
+            'price' => 50,
+            'checkout_config' => array_merge(Product::defaultCheckoutConfig(), [
+                'payment_gateways' => ['card' => 'cajupay'],
+            ]),
+        ]);
+
+        $cred = GatewayCredential::create([
+            'tenant_id' => 1,
+            'gateway_slug' => 'cajupay',
+            'credentials' => '',
+            'is_connected' => true,
+        ]);
+        $cred->setEncryptedCredentials(['public_key' => 'pk_test', 'secret_key' => 'sk_test']);
+        $cred->save();
+
+        $response = $this->postJson(route('checkout.cajupay.session'), [
+            'product_id' => $product->id,
+            'payment_method' => 'card',
+            'checkout_locale' => 'pt_BR',
+        ]);
+
+        $response->assertOk();
+
+        Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), '/api/sdk/v1/checkout/sessions')) {
+                return false;
+            }
+
+            return ($request->data()['locale'] ?? null) === 'pt-BR';
+        });
+    }
 }

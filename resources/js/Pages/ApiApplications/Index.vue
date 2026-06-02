@@ -102,7 +102,7 @@ function confirmDelete(app) {
             {{ flashSuccess }}
         </div>
 
-        <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 overflow-hidden">
+        <div class="panel-table">
             <ul v-if="applications.length" class="divide-y divide-zinc-200 dark:divide-zinc-700">
                 <li
                     v-for="app in applications"

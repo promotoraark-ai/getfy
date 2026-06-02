@@ -6,6 +6,7 @@ use App\Gateways\GatewayRegistry;
 use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Models\Product;
+use App\Services\CommissionSplitService;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -56,18 +57,42 @@ class PaymentService
                 } elseif ($gatewaySlug !== 'spacepag') {
                     $postbackUrl = $this->webhookUrlForGateway($gatewaySlug);
                 }
+                $splitId = null;
+                $splitContext = null;
+                if ($gatewaySlug === 'cajupay' && $product) {
+                    try {
+                        $splitContext = app(CommissionSplitService::class)->resolveSplitForOrder($order, $product);
+                        $splitId = $splitContext['split_id'] ?? null;
+                    } catch (\Throwable) {
+                        $splitId = null;
+                        $splitContext = null;
+                    }
+                }
+
                 $result = $driver->createPixPayment(
                     $credentials,
                     (float) $order->amount,
                     $consumer,
                     (string) $order->id,
-                    $postbackUrl
+                    $postbackUrl,
+                    $splitId
                 );
                 $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
-                $order->update([
+                $orderUpdate = [
                     'gateway' => $gatewaySlug,
                     'gateway_id' => $result['transaction_id'] ?? null,
-                ]);
+                ];
+                if ($splitId && $splitContext) {
+                    $metadata = is_array($order->metadata) ? $order->metadata : [];
+                    $metadata['cajupay_split_id'] = $splitId;
+                    $metadata['cajupay_split_beneficiary_role'] = $splitContext['beneficiary_role'];
+                    $metadata['cajupay_split_beneficiary_id'] = $splitContext['beneficiary_id'];
+                    if (! empty($splitContext['multiple_coproducer_splits'])) {
+                        $metadata['cajupay_split_multiple_coproducers'] = true;
+                    }
+                    $orderUpdate['metadata'] = $metadata;
+                }
+                $order->update($orderUpdate);
                 if ($durationMs >= self::SLOW_GATEWAY_CALL_MS) {
                     Log::info('PaymentService: PIX gateway slow success.', [
                         'gateway' => $gatewaySlug,

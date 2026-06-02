@@ -82,7 +82,7 @@ function submit() {
                 <p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p>
             </div>
 
-            <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 p-4">
+            <div class="panel-card-sm">
                 <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <Palette class="h-4 w-4" />
                     Cor de fundo do checkout
@@ -110,7 +110,7 @@ function submit() {
                 <p v-if="form.errors.checkout_sidebar_bg" class="mt-2 text-sm text-red-600">{{ form.errors.checkout_sidebar_bg }}</p>
             </div>
 
-            <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 p-4">
+            <div class="panel-card-sm">
                 <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <Settings2 class="h-4 w-4" />
                     Gateways por método de pagamento

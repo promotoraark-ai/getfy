@@ -1,9 +1,19 @@
 /* Service worker for member area PWA - scope is set at registration time */
+const SW_VERSION = '2';
+
 self.addEventListener('install', function () {
   self.skipWaiting();
 });
 self.addEventListener('activate', function (event) {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then(function (keys) {
+      return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+    }).then(function () {
+      return self.clients.claim();
+    }).then(function () {
+      console.info('[member-area-sw] activated v' + SW_VERSION);
+    })
+  );
 });
 
 self.addEventListener('push', function (event) {

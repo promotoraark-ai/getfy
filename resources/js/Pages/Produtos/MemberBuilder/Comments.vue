@@ -59,7 +59,7 @@ function reject(commentId) {
             </button>
         </div>
 
-        <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+        <div class="panel-table">
             <ul class="divide-y divide-zinc-200 dark:divide-zinc-700">
                 <li v-for="c in comments.data" :key="c.id" class="p-4">
                     <div class="flex items-start justify-between gap-4">

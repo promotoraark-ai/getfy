@@ -36,8 +36,8 @@ return [
     ],
 
     'plugin_store' => [
-        // URL da loja de plugins. Use a URL do seu plugins-getfy (ex.: http://plugins-getfy.test). Vazio = aba loja não carrega plugins.
-        'url' => rtrim(env('PLUGIN_STORE_URL', ''), '/'),
+        // URL fixa da loja (ver config/getfy.php plugin_store_url).
+        'url' => rtrim((string) config('getfy.plugin_store_url', 'https://store.getfy.cloud'), '/'),
         'api_key' => env('PLUGIN_STORE_API_KEY'),
         'submit_url' => env('PLUGIN_STORE_SUBMIT_URL'),
     ],

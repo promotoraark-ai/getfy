@@ -36,6 +36,7 @@ class Product extends Model
         'price',
         'currency',
         'is_active',
+        'cajupay_split_payout_enabled',
         'conversion_pixels',
         'member_area_config',
         'combo_product_ids',
@@ -46,6 +47,7 @@ class Product extends Model
         return [
             'price' => 'decimal:2',
             'is_active' => 'boolean',
+            'cajupay_split_payout_enabled' => 'boolean',
             'checkout_config' => 'array',
             'member_area_config' => 'array',
             'conversion_pixels' => 'array',
@@ -555,6 +557,21 @@ class Product extends Model
             return $query->whereNull('tenant_id');
         }
         return $query->where('tenant_id', $tenantId);
+    }
+
+    public function affiliateProgram(): HasOne
+    {
+        return $this->hasOne(ProductAffiliateProgram::class);
+    }
+
+    public function coproducers(): HasMany
+    {
+        return $this->hasMany(ProductCoproducer::class);
+    }
+
+    public function affiliates(): HasMany
+    {
+        return $this->hasMany(ProductAffiliate::class);
     }
 
     public function memberAreaDomain(): HasOne

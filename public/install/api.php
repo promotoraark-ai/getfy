@@ -311,7 +311,6 @@ REDIS_PASSWORD=null
 REDIS_PORT=6379
 
 VITE_APP_NAME=\"" . addslashes($appName) . "\"
-PLUGIN_STORE_URL=https://getfy.store
 
 # PWA Painel: chaves VAPID (preenchidas pelo instalador ou php artisan pwa:vapid)
 PWA_VAPID_PUBLIC=

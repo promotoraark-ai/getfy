@@ -1,14 +1,10 @@
 <script setup>
 import { computed, inject } from 'vue';
 import { PanelsTopLeft, Bell } from 'lucide-vue-next';
-import { usePage } from '@inertiajs/vue3';
 import { useSidebar } from '@/composables/useSidebar';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import ThemeToggler from '@/components/layout/ThemeToggler.vue';
 import UserMenu from '@/components/layout/UserMenu.vue';
-
-const page = usePage();
-const isDashboard = computed(() => page.url === '/dashboard' || page.url.startsWith('/dashboard?'));
 
 defineProps({
     pageTitle: { type: String, default: null },
@@ -35,7 +31,7 @@ const unreadBadge = computed(() => Math.max(0, notificationsUnreadCount?.value ?
                 <PanelsTopLeft class="h-5 w-5" aria-hidden="true" />
             </button>
             <template v-if="pageTitle">
-                <h1 class="truncate text-xl font-semibold text-zinc-900 dark:text-white md:text-2xl">
+                <h1 class="truncate text-xl font-bold text-zinc-900 dark:text-white md:text-2xl">
                     {{ pageTitle }}
                 </h1>
                 <span
@@ -48,11 +44,11 @@ const unreadBadge = computed(() => Math.max(0, notificationsUnreadCount?.value ?
             </template>
         </div>
         <div class="flex shrink-0 items-center gap-2">
-            <ConquistasWidget v-if="!isDashboard || !isMobile" />
+            <ConquistasWidget v-if="!isMobile" />
             <ThemeToggler />
             <button
                 type="button"
-                class="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200/50 bg-white/50 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:border-zinc-800/60 dark:bg-zinc-900/60 dark:text-zinc-400 dark:hover:bg-[#0f0f13] dark:hover:text-zinc-200"
                 aria-label="Notificações"
                 @click="openNotificationsPanel()"
             >

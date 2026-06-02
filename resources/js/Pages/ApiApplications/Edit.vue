@@ -458,7 +458,7 @@ function regenerateKey() {
                 </p>
 
                 <div class="space-y-4">
-                    <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900 space-y-3">
+                    <div class="panel-card-sm space-y-3 dark:bg-zinc-900">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">Meta Pixel</p>
@@ -490,7 +490,7 @@ function regenerateKey() {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900 space-y-3">
+                    <div class="panel-card-sm space-y-3 dark:bg-zinc-900">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">TikTok Pixel</p>
@@ -522,7 +522,7 @@ function regenerateKey() {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900 space-y-3">
+                    <div class="panel-card-sm space-y-3 dark:bg-zinc-900">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">Google Ads</p>
@@ -554,7 +554,7 @@ function regenerateKey() {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900 space-y-3">
+                    <div class="panel-card-sm space-y-3 dark:bg-zinc-900">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">Google Analytics (GA4)</p>
@@ -582,7 +582,7 @@ function regenerateKey() {
                         </div>
                     </div>
 
-                    <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900 space-y-3">
+                    <div class="panel-card-sm space-y-3 dark:bg-zinc-900">
                         <div class="flex items-center justify-between gap-3">
                             <div>
                                 <p class="text-sm font-semibold text-zinc-900 dark:text-white">Script personalizado</p>
@@ -591,7 +591,7 @@ function regenerateKey() {
                             <Button type="button" variant="outline" size="sm" @click="form.conversion_pixels.custom_script.push({ id: randomClientId(), name: '', script: '' })">Adicionar</Button>
                         </div>
                         <div v-if="form.conversion_pixels.custom_script.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">Nenhum script adicionado.</div>
-                        <div v-for="(item, idx) in form.conversion_pixels.custom_script" :key="item.id" class="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/60">
+                        <div v-for="(item, idx) in form.conversion_pixels.custom_script" :key="item.id" class="panel-card-sm space-y-3">
                             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                                 <div>
                                     <label class="block text-xs font-medium text-zinc-700 dark:text-zinc-300">Nome</label>
@@ -679,7 +679,7 @@ function regenerateKey() {
                 <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                     Copie agora. Esta key não será exibida novamente.
                 </p>
-                <div class="mt-4 flex items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="mt-4 panel-card flex items-center gap-2 p-3">
                     <code class="min-w-0 flex-1 truncate text-sm font-mono text-zinc-800 dark:text-zinc-200">{{ revealedKey }}</code>
                     <Button type="button" size="sm" variant="outline" class="shrink-0" @click="copyKey">
                         <Check v-if="copyKeyFeedback" class="h-4 w-4 text-emerald-600" />

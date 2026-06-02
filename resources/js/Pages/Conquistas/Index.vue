@@ -62,7 +62,7 @@ function saveUsername() {
         </div>
 
         <!-- Resumo -->
-        <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+        <div class="panel-table">
             <div class="border-b border-zinc-200 px-6 py-4 dark:border-zinc-700">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -91,7 +91,7 @@ function saveUsername() {
         </div>
 
         <!-- Username para compartilhar -->
-        <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+        <div class="panel-table">
             <div class="border-b border-zinc-200 px-6 py-4 dark:border-zinc-700">
                 <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">Nome para compartilhar</h2>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">

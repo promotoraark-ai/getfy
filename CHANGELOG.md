@@ -37,6 +37,7 @@
 
 ### Correções
 
+- **Aprovação manual / webhooks**: corrigido `SendMetaPurchaseCapiOnOrderCompleted` (versão antiga com `ShouldQueue` + segundo argumento no `handle()` quebrava `OrderCompleted`, bloqueava webhooks e exibia erro falso ao aprovar venda); integrações não impedem mais a concessão de acesso.
 - **Dashboard / vendas após meia-noite**: cache do dashboard não incluía a data no filtro “hoje” (podia mostrar totais zerados ou do dia anterior até expirar o cache); filtros de período passam a usar o fuso `APP_TIMEZONE` com limites corretos de meia-noite; cache de “hoje/ontem” renova em 60s e é invalidado a cada venda concluída.
 - **Utmify / vendas em moeda estrangeira**: valores enviados à Utmify passam a usar o **liquidação em BRL** (`settlement_amount_cents` do webhook CajuPay), e não o valor em USD/EUR da cobrança — evita registrar R$ 4,86 quando o recebimento real foi ~R$ 27.
 - **CajuPay / Google Pay**: corrigido pagamento aprovado na CajuPay sem concluir o pedido no Getfy — o SDK não faz mais priming automático antes do `confirm-order`, a wallet só é exibida com dados do cliente válidos e o evento `completed` do SDK dispara materialização do pedido + polling.

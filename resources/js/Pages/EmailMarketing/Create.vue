@@ -70,7 +70,7 @@ async function previewRecipients() {
             </p>
         </div>
 
-        <form class="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800/50" @submit.prevent="form.post('/email-marketing')">
+        <form class="panel-card-lg space-y-6" @submit.prevent="form.post('/email-marketing')">
             <div>
                 <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nome da campanha</label>
                 <input

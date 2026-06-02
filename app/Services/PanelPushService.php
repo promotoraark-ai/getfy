@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Log;
 
 class PanelPushService
 {
+    private const MAX_PUSH_FAIL_COUNT = 5;
+
     /**
      * Envia push para o tenant e persiste uma notificação por usuário (para o centro de notificações).
      *
@@ -133,12 +135,19 @@ class PanelPushService
                     $report = $webPush->sendOneNotification($subscription, $payload);
                     if ($report->isSuccess()) {
                         $sent++;
-                    } elseif ($report->isSubscriptionExpired()) {
+                        if ($sub->push_fail_count > 0 || $sub->last_push_failed_at !== null) {
+                            $sub->update(['push_fail_count' => 0, 'last_push_failed_at' => null]);
+                        }
+                    } elseif ($this->shouldRemoveSubscription($report)) {
                         $expiredCount++;
                         $sub->delete();
-                        Log::info('PanelPushService: subscription expirada removida', ['subscription_id' => $sub->id]);
+                        Log::info('PanelPushService: subscription inválida removida', [
+                            'subscription_id' => $sub->id,
+                            'reason' => $report->getReason(),
+                        ]);
                     } else {
                         $failedCount++;
+                        $this->recordPushFailure($sub, $report->getReason());
                         Log::warning('PanelPushService: envio falhou', [
                             'subscription_id' => $sub->id,
                             'reason' => $report->getReason(),
@@ -146,6 +155,7 @@ class PanelPushService
                     }
                 } catch (\Throwable $e) {
                     $failedCount++;
+                    $this->recordPushFailure($sub, $e->getMessage());
                     Log::warning('PanelPushService: falha ao enviar para subscription', [
                         'subscription_id' => $sub->id,
                         'tenant_id' => $sub->tenant_id,
@@ -179,6 +189,41 @@ class PanelPushService
      * Normaliza chave para o formato esperado pela minishlink/web-push (evita "Base64::decode() only expects characters in the correct base64 alphabet").
      * Converte base64 padrão (+/) para base64url (-_) se a lib esperar base64url; senão mantém padrão.
      */
+    private function shouldRemoveSubscription(\Minishlink\WebPush\MessageSentReport $report): bool
+    {
+        if ($report->isSubscriptionExpired()) {
+            return true;
+        }
+
+        $reason = strtolower((string) $report->getReason());
+
+        return str_contains($reason, '410')
+            || str_contains($reason, '404')
+            || str_contains($reason, 'gone')
+            || str_contains($reason, 'expired')
+            || str_contains($reason, 'unsubscribed');
+    }
+
+    private function recordPushFailure(PanelPushSubscription $sub, ?string $reason): void
+    {
+        $failCount = (int) $sub->push_fail_count + 1;
+        if ($failCount >= self::MAX_PUSH_FAIL_COUNT) {
+            $sub->delete();
+            Log::info('PanelPushService: subscription removida após falhas repetidas', [
+                'subscription_id' => $sub->id,
+                'fail_count' => $failCount,
+                'reason' => $reason,
+            ]);
+
+            return;
+        }
+
+        $sub->update([
+            'push_fail_count' => $failCount,
+            'last_push_failed_at' => now(),
+        ]);
+    }
+
     private function normalizeBase64KeyForPush(string $key): string
     {
         $key = trim($key);

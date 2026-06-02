@@ -71,6 +71,34 @@ class Order extends Model
         return $this->hasOne(RefundRequest::class);
     }
 
+    public function commissionEntries(): HasMany
+    {
+        return $this->hasMany(CommissionEntry::class);
+    }
+
+    public function affiliateCode(): ?string
+    {
+        $meta = $this->metadata ?? [];
+        $code = $meta['affiliate_code'] ?? null;
+
+        return is_string($code) ? \App\Support\AffiliateAttribution::normalizeRef($code) : null;
+    }
+
+    public function saleChannel(): string
+    {
+        $meta = $this->metadata ?? [];
+
+        return ($meta['sale_channel'] ?? 'producer') === 'affiliate' ? 'affiliate' : 'producer';
+    }
+
+    public function checkoutPaymentMethod(): string
+    {
+        $meta = $this->metadata ?? [];
+        $m = strtolower((string) ($meta['checkout_payment_method'] ?? 'pix'));
+
+        return $m !== '' ? $m : 'pix';
+    }
+
     /**
      * Copia utm_* da checkout_sessions vinculada para orders.metadata (painel de vendas / filtros),
      * útil quando o pedido vira "completed" só depois (ex.: webhook) ou se metadata ficou vazio no create.

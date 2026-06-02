@@ -26,6 +26,10 @@ class RunScheduleFallback
      */
     public function terminate(Request $request, Response $response): void
     {
+        if (app()->runningUnitTests()) {
+            return;
+        }
+
         $user = $request->user();
         if (! $user || ! $user->canAccessPanel()) {
             return;

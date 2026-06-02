@@ -30,6 +30,38 @@ const certificateFile = ref(null);
 const webhookCopied = ref(false);
 const webhookCopiedSecondary = ref(false);
 const disconnecting = ref(false);
+const fees = ref({
+    pix: { percent: 0, fixed_cents: 0 },
+    card: { percent: 0, fixed_cents: 0 },
+    boleto: { percent: 0, fixed_cents: 0 },
+});
+const savingFees = ref(false);
+const feesMessage = ref('');
+
+async function loadFees(slug) {
+    try {
+        const { data } = await axios.get(`/configuracoes/gateways/${encodeURIComponent(slug)}/fees`);
+        if (data.fees) {
+            fees.value = { ...fees.value, ...data.fees };
+        }
+    } catch {
+        feesMessage.value = '';
+    }
+}
+
+async function saveFees() {
+    if (!props.gatewaySlug) return;
+    savingFees.value = true;
+    feesMessage.value = '';
+    try {
+        await axios.put(`/configuracoes/gateways/${encodeURIComponent(props.gatewaySlug)}/fees`, { fees: fees.value });
+        feesMessage.value = 'Taxas salvas.';
+    } catch {
+        feesMessage.value = 'Erro ao salvar taxas.';
+    } finally {
+        savingFees.value = false;
+    }
+}
 
 async function copyWebhookUrl() {
     const url = gateway.value?.webhook_url;
@@ -70,6 +102,7 @@ watch(
                     { params: { t: Date.now() } }
                 );
                 gateway.value = data;
+                await loadFees(slug);
                 const keys = data.credential_keys || [];
                 const saved = data.credential_values || {};
                 const initial = {};
@@ -532,6 +565,28 @@ const canTestConnection = computed(() => {
                         >
                             Conta autorizada. Teste a conexão abaixo ou desconecte.
                         </p>
+                    </div>
+
+                    <div class="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                        <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Taxas para comissões (líquido)</h3>
+                        <p class="mt-1 text-xs text-zinc-500">Usadas no cálculo de co-produção e afiliados.</p>
+                        <div class="mt-3 space-y-3">
+                            <div v-for="method in ['pix', 'card', 'boleto']" :key="method" class="grid grid-cols-3 gap-2 items-end">
+                                <span class="text-xs font-medium uppercase text-zinc-500">{{ method }}</span>
+                                <div>
+                                    <label class="text-[10px] text-zinc-500">% </label>
+                                    <input v-model.number="fees[method].percent" type="number" step="0.01" min="0" class="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+                                </div>
+                                <div>
+                                    <label class="text-[10px] text-zinc-500">Fixo (cent)</label>
+                                    <input v-model.number="fees[method].fixed_cents" type="number" min="0" class="w-full rounded border px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-900" />
+                                </div>
+                            </div>
+                        </div>
+                        <Button type="button" class="mt-3 w-full" variant="outline" :disabled="savingFees" @click="saveFees">
+                            {{ savingFees ? 'Salvando…' : 'Salvar taxas' }}
+                        </Button>
+                        <p v-if="feesMessage" class="mt-2 text-xs text-zinc-500">{{ feesMessage }}</p>
                     </div>
 
                     <p

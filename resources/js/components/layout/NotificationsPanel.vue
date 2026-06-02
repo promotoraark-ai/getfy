@@ -4,6 +4,7 @@ import { X, Bell, Check, ExternalLink } from 'lucide-vue-next';
 import axios from 'axios';
 import { router } from '@inertiajs/vue3';
 import { usePanelPushSubscribe } from '@/composables/usePanelPushSubscribe';
+import { pushErrorMessage } from '@/lib/pushSubscription';
 import { usePage } from '@inertiajs/vue3';
 
 const props = defineProps({
@@ -14,7 +15,14 @@ const emit = defineEmits(['update:open', 'unread-count-update']);
 
 const page = usePage();
 const pushEnabled = computed(() => !!page.props.push_enabled);
-const { pushRegistered, registerAndSubscribe, pushSubscribing, checkExistingSubscription, lastPushError } = usePanelPushSubscribe();
+const {
+    pushRegistered,
+    registerAndSubscribe,
+    pushSubscribing,
+    checkExistingSubscription,
+    lastPushError,
+    reactivatePush,
+} = usePanelPushSubscribe();
 
 // Não acessar Notification no template (é API global; Vue resolve como prop do componente). Tudo via computeds:
 const hasNotificationAPI = computed(() => typeof window !== 'undefined' && typeof window.Notification !== 'undefined');
@@ -151,6 +159,30 @@ async function activateNotifications() {
 }
 
 const hasUnread = computed(() => unreadCount.value > 0);
+
+const pushErrorLabel = computed(() =>
+    lastPushError.value ? pushErrorMessage(lastPushError.value) : null,
+);
+
+const canReactivatePush = computed(
+    () =>
+        pushEnabled.value &&
+        notificationPermissionGranted.value &&
+        !pushActive.value &&
+        (lastPushError.value || !pushRegistered.value),
+);
+
+async function reactivateNotifications() {
+    activatingPush.value = true;
+    try {
+        const success = await reactivatePush();
+        if (success) {
+            await fetchNotifications();
+            pushSubscribed.value = true;
+        }
+    } catch (_) {}
+    activatingPush.value = false;
+}
 </script>
 
 <template>
@@ -240,11 +272,20 @@ const hasUnread = computed(() => unreadCount.value > 0);
                             Notificações bloqueadas. Habilite nas configurações do navegador para receber avisos.
                         </p>
                         <p
-                            v-else-if="pushEnabled && !pushActive && lastPushError"
-                            class="mt-2 text-xs text-zinc-500 dark:text-zinc-400"
+                            v-else-if="pushEnabled && !pushActive && pushErrorLabel"
+                            class="mt-2 text-xs text-amber-700 dark:text-amber-300/90"
                         >
-                            Não foi possível ativar agora. Tente novamente em alguns segundos.
+                            {{ pushErrorLabel }}
                         </p>
+                        <button
+                            v-if="canReactivatePush"
+                            type="button"
+                            class="mt-2 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                            :disabled="activatingPush || pushSubscribing"
+                            @click="reactivateNotifications"
+                        >
+                            {{ activatingPush || pushSubscribing ? 'Aguarde...' : 'Reativar notificações' }}
+                        </button>
                         <p
                             v-else-if="!pushEnabled"
                             class="mt-2 text-xs text-zinc-500 dark:text-zinc-400"

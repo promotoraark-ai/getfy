@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Events\AccessDeliveryReady;
 use App\Events\BoletoGenerated;
 use App\Events\CartAbandoned;
 use App\Events\OrderCancelled;
@@ -19,11 +20,11 @@ use App\Models\Webhook;
 use App\Models\Order;
 use App\Models\CheckoutSession;
 use App\Models\Subscription;
+use App\Support\WebhookPayloadBuilder;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\URL;
 
 class WebhookEventSubscriber
 {
@@ -78,8 +79,7 @@ class WebhookEventSubscriber
                 'count' => $webhooks->count(),
             ]);
 
-            $payload = $this->serializeEventPayload($event);
-            $payload = $this->enrichPayload($event, $payload);
+            $payload = $this->buildPayload($event);
             $dispatchSync = $this->shouldDispatchSync($eventClass);
 
             foreach ($webhooks as $webhook) {
@@ -89,8 +89,6 @@ class WebhookEventSubscriber
 
                 try {
                     if ($dispatchSync) {
-                        // Não bloquear fluxos sensíveis (checkout/pagamento) quando a fila estiver em sync/instável.
-                        // `dispatchAfterResponse` executa após enviar a resposta (e/ou via worker se houver fila async).
                         DispatchWebhookJob::dispatchAfterResponse($webhook->id, $eventClass, $payload);
                     } else {
                         DispatchWebhookJob::dispatch($webhook->id, $eventClass, $payload);
@@ -116,6 +114,53 @@ class WebhookEventSubscriber
         }
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildPayload(object $event): array
+    {
+        if ($event instanceof OrderPending || $event instanceof OrderCompleted
+            || $event instanceof OrderRejected || $event instanceof OrderCancelled
+            || $event instanceof OrderRefunded || $event instanceof PixGenerated
+            || $event instanceof BoletoGenerated) {
+            $extras = [];
+            if ($event instanceof PixGenerated && ! empty($event->pixData)) {
+                $extras['pix'] = [
+                    'qrcode' => $event->pixData['qrcode'] ?? null,
+                    'copy_paste' => $event->pixData['copy_paste'] ?? null,
+                    'transaction_id' => $event->pixData['transaction_id'] ?? null,
+                ];
+            }
+            if ($event instanceof BoletoGenerated && ! empty($event->boletoData)) {
+                $extras['boleto'] = [
+                    'amount' => $event->boletoData['amount'] ?? null,
+                    'expire_at' => $event->boletoData['expire_at'] ?? null,
+                    'barcode' => $event->boletoData['barcode'] ?? null,
+                    'pdf_url' => $event->boletoData['pdf_url'] ?? null,
+                ];
+            }
+
+            return WebhookPayloadBuilder::forOrderEvent($event->order, $extras);
+        }
+
+        if ($event instanceof AccessDeliveryReady) {
+            return WebhookPayloadBuilder::forOrderEvent($event->order, [
+                'access' => is_array($event->access) ? $event->access : [],
+            ]);
+        }
+
+        if ($event instanceof CartAbandoned) {
+            return WebhookPayloadBuilder::forCartAbandoned($event->checkoutSession);
+        }
+
+        if ($event instanceof SubscriptionCreated || $event instanceof SubscriptionRenewed
+            || $event instanceof SubscriptionCancelled || $event instanceof SubscriptionPastDue) {
+            return WebhookPayloadBuilder::forSubscriptionEvent($event->subscription);
+        }
+
+        return $this->serializeEventPayload($event);
+    }
+
     private function shouldDispatchSync(string $eventClass): bool
     {
         if (config('getfy.webhooks.dispatch_all_sync', false)) {
@@ -127,7 +172,6 @@ class WebhookEventSubscriber
             return true;
         }
 
-        // Em dev/local, é comum não ter worker configurado corretamente; dispara sync para evitar “silêncio”.
         if (app()->environment('local')) {
             return true;
         }
@@ -167,8 +211,6 @@ class WebhookEventSubscriber
                     'product_id_attr' => method_exists($value, 'getAttribute') ? $value->getAttribute('product_id') : null,
                 ]);
 
-                // Alguns fluxos podem emitir eventos com tenant_id nulo no modelo principal.
-                // Nesses casos, inferimos o tenant pelo produto relacionado.
                 if ($tid === null) {
                     try {
                         if ($value instanceof Order) {
@@ -213,22 +255,17 @@ class WebhookEventSubscriber
             }
         }
 
-        // IMPORTANTE: `array_filter()` sem callback remove valores "falsy" como 0.
-        // Queremos remover apenas `null` (tenant 0 pode existir em alguns ambientes/dados).
         $ids = array_values(array_unique(array_filter($ids, fn ($v) => $v !== null)));
 
         return $ids;
     }
 
-    /**
-     * Extract product_id from event (Order events, CartAbandoned, Subscription events)
-     */
     private function getProductIdFromEvent(object $event): int|string|null
     {
         if ($event instanceof OrderPending || $event instanceof OrderCompleted
             || $event instanceof OrderRejected || $event instanceof OrderCancelled
             || $event instanceof OrderRefunded || $event instanceof PixGenerated
-            || $event instanceof BoletoGenerated) {
+            || $event instanceof BoletoGenerated || $event instanceof AccessDeliveryReady) {
             return $event->order?->product_id;
         }
 
@@ -245,6 +282,8 @@ class WebhookEventSubscriber
     }
 
     /**
+     * Fallback for unknown event shapes.
+     *
      * @return array<string, mixed>
      */
     private function serializeEventPayload(object $event): array
@@ -273,72 +312,5 @@ class WebhookEventSubscriber
         }
 
         return $value;
-    }
-
-    /**
-     * Adiciona customer, checkout_link e (para Pix) pix ao payload.
-     *
-     * @param  array<string, mixed>  $payload
-     * @return array<string, mixed>
-     */
-    private function enrichPayload(object $event, array $payload): array
-    {
-        $extra = [];
-
-        if ($event instanceof OrderPending || $event instanceof OrderCompleted
-            || $event instanceof OrderRejected || $event instanceof OrderCancelled
-            || $event instanceof OrderRefunded || $event instanceof PixGenerated
-            || $event instanceof BoletoGenerated) {
-            $order = $event->order;
-            $order->loadMissing(['user', 'product', 'productOffer', 'subscriptionPlan']);
-            $extra['customer'] = [
-                'name' => $order->user?->name ?? '',
-                'email' => $order->email ?? '',
-                'phone' => $order->phone ?? '',
-                'cpf' => $order->cpf ?? '',
-            ];
-            $slug = $order->getCheckoutSlug();
-            $extra['checkout_link'] = $slug ? URL::route('checkout.show', ['slug' => $slug]) : '';
-        }
-
-        if ($event instanceof PixGenerated && ! empty($event->pixData)) {
-            $extra['pix'] = [
-                'qrcode' => $event->pixData['qrcode'] ?? null,
-                'copy_paste' => $event->pixData['copy_paste'] ?? null,
-                'transaction_id' => $event->pixData['transaction_id'] ?? null,
-            ];
-        }
-
-        if ($event instanceof CartAbandoned) {
-            $session = $event->checkoutSession;
-            $session->loadMissing('product');
-            $extra['customer'] = [
-                'name' => $session->name ?? '',
-                'email' => $session->email ?? '',
-                'phone' => '',
-                'cpf' => '',
-            ];
-            $slug = $session->checkout_slug ?? $session->product?->checkout_slug ?? '';
-            $extra['checkout_link'] = $slug ? URL::route('checkout.show', ['slug' => $slug]) : '';
-        }
-
-        if ($event instanceof SubscriptionCreated || $event instanceof SubscriptionRenewed
-            || $event instanceof SubscriptionCancelled || $event instanceof SubscriptionPastDue) {
-            $subscription = $event->subscription;
-            $subscription->loadMissing(['user', 'product', 'subscriptionPlan']);
-            $user = $subscription->user;
-            $extra['customer'] = [
-                'name' => $user?->name ?? '',
-                'email' => $user?->email ?? '',
-                'phone' => '',
-                'cpf' => '',
-            ];
-            $slug = $subscription->subscriptionPlan?->checkout_slug
-                ?? $subscription->product?->checkout_slug
-                ?? '';
-            $extra['checkout_link'] = $slug ? URL::route('checkout.show', ['slug' => $slug]) : '';
-        }
-
-        return array_merge($payload, $extra);
     }
 }

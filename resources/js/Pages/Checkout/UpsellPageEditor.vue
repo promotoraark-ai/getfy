@@ -157,7 +157,7 @@ const inputClass =
 
         <div class="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row">
             <div class="min-h-0 w-full flex-1 space-y-4 overflow-y-auto lg:flex-none lg:shrink-0 lg:w-[380px]">
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -213,7 +213,7 @@ const inputClass =
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -245,7 +245,7 @@ const inputClass =
                     </div>
                 </div>
 
-                <div class="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                <div class="panel-card-lg">
                     <button
                         type="button"
                         class="flex w-full items-center justify-between gap-2 px-4 py-3 text-left font-semibold text-zinc-900 dark:text-white"
@@ -267,7 +267,7 @@ const inputClass =
                                 Nenhuma oferta configurada. Adicione ofertas na aba <strong>Upsell / Downsell</strong> do produto e volte aqui.
                             </p>
                         </template>
-                        <div v-for="(item, idx) in form.products" :key="idx" class="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-3 dark:border-zinc-600 dark:bg-zinc-800/50">
+                        <div v-for="(item, idx) in form.products" :key="idx" class="panel-card p-3 space-y-3">
                             <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ productLabel(item) }}</p>
                             <div>
                                 <label class="mb-0.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Título (override)</label>

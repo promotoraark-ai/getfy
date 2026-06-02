@@ -639,4 +639,61 @@ class GatewaysController extends Controller
             'google_pay' => $raw['google_pay'] ?? $default['google_pay'] ?? [],
         ];
     }
+
+    public function fees(string $slug): JsonResponse
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $methods = ['pix', 'card', 'boleto'];
+        $fees = [];
+        foreach ($methods as $method) {
+            $row = \App\Models\GatewayFeeSetting::forTenant($tenantId)
+                ->where('gateway_slug', $slug)
+                ->where('method', $method)
+                ->first();
+            $defaults = config('commissions.default_gateway_fees.'.$method, ['percent' => 0, 'fixed_cents' => 0]);
+            $fees[$method] = [
+                'percent' => $row ? (float) $row->percent : (float) ($defaults['percent'] ?? 0),
+                'fixed_cents' => $row ? (int) $row->fixed_cents : (int) ($defaults['fixed_cents'] ?? 0),
+            ];
+        }
+
+        return response()->json(['fees' => $fees]);
+    }
+
+    public function updateFees(Request $request, string $slug): JsonResponse
+    {
+        $tenantId = auth()->user()->tenant_id;
+        $validated = $request->validate([
+            'fees' => ['required', 'array'],
+            'fees.pix' => ['nullable', 'array'],
+            'fees.pix.percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'fees.pix.fixed_cents' => ['nullable', 'integer', 'min:0'],
+            'fees.card' => ['nullable', 'array'],
+            'fees.card.percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'fees.card.fixed_cents' => ['nullable', 'integer', 'min:0'],
+            'fees.boleto' => ['nullable', 'array'],
+            'fees.boleto.percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'fees.boleto.fixed_cents' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        foreach (['pix', 'card', 'boleto'] as $method) {
+            $cfg = $validated['fees'][$method] ?? null;
+            if (! is_array($cfg)) {
+                continue;
+            }
+            \App\Models\GatewayFeeSetting::updateOrCreate(
+                [
+                    'tenant_id' => $tenantId,
+                    'gateway_slug' => $slug,
+                    'method' => $method,
+                ],
+                [
+                    'percent' => $cfg['percent'] ?? 0,
+                    'fixed_cents' => $cfg['fixed_cents'] ?? 0,
+                ]
+            );
+        }
+
+        return response()->json(['success' => true]);
+    }
 }

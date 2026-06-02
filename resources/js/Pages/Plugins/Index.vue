@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import Button from '@/components/ui/Button.vue';
-import { Puzzle, Power, PowerOff, ExternalLink, CreditCard, Package, Download, Upload, Trash2, FolderUp } from 'lucide-vue-next';
+import { Puzzle, Power, PowerOff, ExternalLink, CreditCard, Package, Download, Trash2, FolderUp, ArrowUpRight } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutInfoprodutor });
 
@@ -89,16 +89,35 @@ const manualInstallProcessing = ref(false);
 const downloadFallbackLoading = ref(false);
 const downloadFallbackError = ref('');
 
+/** URL fixa da loja — não vem do .env. */
+const PLUGIN_STORE_URL = 'https://store.getfy.cloud';
+
+function goToPluginStore() {
+    if (typeof window !== 'undefined') {
+        window.open(PLUGIN_STORE_URL, '_blank', 'noopener,noreferrer');
+    }
+}
+
 function setTab(tabId) {
+    if (tabId === 'store') {
+        goToPluginStore();
+        return;
+    }
     router.get('/gerenciar-plugins', { tab: tabId }, { preserveState: true });
 }
 
+watch(
+    currentTab,
+    (tab) => {
+        if (tab !== 'store') return;
+        goToPluginStore();
+        router.replace('/gerenciar-plugins', { preserveState: true });
+    },
+    { immediate: true }
+);
+
 async function loadStorePlugins() {
-    const baseUrl = props.pluginStore?.store_url;
-    if (!baseUrl) {
-        storePluginsError.value = 'Configure PLUGIN_STORE_URL no .env (ex.: http://plugins-getfy.test).';
-        return;
-    }
+    const baseUrl = PLUGIN_STORE_URL;
     storePluginsError.value = null;
     storePluginsLoading.value = true;
     try {
@@ -111,7 +130,7 @@ async function loadStorePlugins() {
         if (!r.ok) storePluginsError.value = json?.error || `Loja retornou HTTP ${r.status}.`;
     } catch (e) {
         storePluginsList.value = [];
-        storePluginsError.value = 'Não foi possível carregar a loja. Verifique a conexão e PLUGIN_STORE_URL.';
+        storePluginsError.value = 'Não foi possível carregar a loja. Tente novamente mais tarde.';
     } finally {
         storePluginsLoading.value = false;
     }
@@ -123,8 +142,7 @@ function categoryLabel(category) {
 
 async function openStoreDetail(plugin) {
     storeDetail.value = { ...plugin };
-    const baseUrl = props.pluginStore?.store_url;
-    if (!baseUrl) return;
+    const baseUrl = PLUGIN_STORE_URL;
     try {
         const apiUrl = baseUrl.replace(/\/$/, '') + '/api/v1/plugins/' + encodeURIComponent(plugin.slug);
         const r = await fetch(apiUrl);
@@ -151,19 +169,13 @@ const returnUrl = computed(() => {
 });
 
 function checkoutUrl(slug) {
-    const url = props.pluginStore?.store_url || '';
-    if (!url) return '#';
-    const base = url.replace(/\/$/, '');
+    const base = PLUGIN_STORE_URL.replace(/\/$/, '');
     const targetCheckout = '/c/' + slug + '?return_url=' + encodeURIComponent(returnUrl.value + slug);
     return `${base}/login?next=${encodeURIComponent(targetCheckout)}`;
 }
 
 async function installStorePlugin(slug, purchaseToken = null) {
-    const baseUrl = props.pluginStore?.store_url;
-    if (!baseUrl) {
-        storePluginsError.value = 'Loja não configurada.';
-        return;
-    }
+    const baseUrl = PLUGIN_STORE_URL;
     installingSlug.value = slug;
     storePluginsError.value = null;
     try {
@@ -242,11 +254,6 @@ function goToGateways() {
     router.visit('/integracoes?tab=gateways');
 }
 
-const bannerLoadFailed = ref({});
-function setBannerFailed(slug) {
-    bannerLoadFailed.value = { ...bannerLoadFailed.value, [slug]: true };
-}
-
 const urlPurchaseToken = ref(null);
 const urlInstallSlug = ref(null);
 watch(() => page.url, () => {
@@ -276,8 +283,8 @@ function closeZipUnavailableModal() {
 
 async function downloadPluginFallback() {
     const slug = lastInstallSlug.value;
-    const baseUrl = props.pluginStore?.store_url;
-    if (!slug || !baseUrl) {
+    const baseUrl = PLUGIN_STORE_URL;
+    if (!slug) {
         if (lastInstallDownloadUrl.value) window.open(lastInstallDownloadUrl.value, '_blank');
         closeZipUnavailableModal();
         return;
@@ -343,202 +350,192 @@ function submitManualInstall() {
 </script>
 
 <template>
-    <div class="space-y-6">
+    <div class="space-y-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                    Plugins
+                </h1>
+                <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    Gerencie extensões instaladas na sua conta.
+                </p>
+            </div>
+        </div>
+
         <nav
             class="inline-flex flex-wrap gap-1 rounded-xl bg-zinc-100/80 p-1 dark:bg-zinc-800/80"
             aria-label="Abas de plugins"
         >
-            <button
-                v-for="tab in TABS"
-                :key="tab.id"
-                type="button"
-                :class="[
-                    'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
-                    currentTab === tab.id
-                        ? 'bg-white text-[var(--color-primary)] shadow-sm dark:bg-zinc-700 dark:text-[var(--color-primary)]'
-                        : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white',
-                ]"
-                @click="setTab(tab.id)"
-            >
-                <component :is="tab.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                {{ tab.label }}
-            </button>
+            <template v-for="tab in TABS" :key="tab.id">
+                <a
+                    v-if="tab.id === 'store'"
+                    :href="PLUGIN_STORE_URL"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 transition-all duration-200 hover:bg-white/60 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-700/50 dark:hover:text-white"
+                >
+                    <component :is="tab.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {{ tab.label }}
+                    <ArrowUpRight class="h-3.5 w-3.5 opacity-60" aria-hidden="true" />
+                </a>
+                <button
+                    v-else
+                    type="button"
+                    :class="[
+                        'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200',
+                        currentTab === tab.id
+                            ? 'bg-white text-[var(--color-primary)] shadow-sm dark:bg-zinc-700 dark:text-[var(--color-primary)]'
+                            : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white',
+                    ]"
+                    @click="setTab(tab.id)"
+                >
+                    <component :is="tab.icon" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                    {{ tab.label }}
+                </button>
+            </template>
         </nav>
 
         <!-- Aba Instalados -->
         <template v-if="currentTab === 'installed'">
-            <section>
-                <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">
-                        Plugins instalados
-                    </h2>
+            <section class="space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <p class="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+                        Ative ou desative plugins. Envie um ZIP com
+                        <code class="rounded bg-zinc-200 px-1 text-xs dark:bg-zinc-700">plugin.json</code>
+                        na pasta raiz para instalar manualmente.
+                    </p>
                     <button
                         type="button"
-                        class="inline-flex items-center gap-2 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                        class="inline-flex shrink-0 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                         @click="openManualInstallModal"
                     >
                         <FolderUp class="h-4 w-4" />
-                        Instalar plugin (ZIP)
+                        Instalar ZIP
                     </button>
                 </div>
-                <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
-                    Ative ou desative plugins. Plugins desativados não carregam rotas nem eventos. Envie um ZIP com uma pasta raiz contendo
-                    <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">plugin.json</code>
-                    para instalar manualmente.
-                </p>
+
                 <div
                     v-if="plugins.length === 0"
-                    class="rounded-xl border border-zinc-200 bg-zinc-50 p-6 text-center text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400"
+                    class="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/80 px-6 py-12 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/30 dark:text-zinc-400"
                 >
-                    Nenhum plugin encontrado na pasta
-                    <code class="rounded bg-zinc-200 px-1.5 py-0.5 text-sm dark:bg-zinc-700">plugins/</code>.
+                    Nenhum plugin na pasta
+                    <code class="rounded bg-zinc-200 px-1.5 py-0.5 text-xs dark:bg-zinc-700">plugins/</code>.
                 </div>
+
                 <div
                     v-else
-                    class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                    class="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900/40"
                 >
-                    <div
-                        v-for="plugin in plugins"
-                        :key="plugin.slug"
-                        class="flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all duration-200 hover:border-zinc-300 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800 dark:hover:border-zinc-600"
-                    >
-                        <!-- Banner do plugin (demonstração; não é o logo do gateway em Configurações) -->
-                        <div
-                            class="relative aspect-[2/1] w-full shrink-0 overflow-hidden rounded-t-2xl border-b border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800/80"
+                    <ul class="divide-y divide-zinc-100 dark:divide-zinc-800" role="list">
+                        <li
+                            v-for="plugin in plugins"
+                            :key="plugin.slug"
+                            class="flex flex-col gap-2 px-4 py-2.5 transition hover:bg-zinc-50/80 sm:flex-row sm:items-center sm:gap-4 dark:hover:bg-zinc-800/40"
                         >
-                            <Puzzle
-                                v-show="!plugin.banner_url || bannerLoadFailed[plugin.slug]"
-                                class="absolute inset-0 m-auto h-14 w-14 text-zinc-400 dark:text-zinc-500"
-                                aria-hidden="true"
-                            />
-                            <img
-                                v-if="plugin.banner_url && !bannerLoadFailed[plugin.slug]"
-                                :src="plugin.banner_url"
-                                :alt="plugin.name"
-                                class="absolute inset-0 h-full w-full object-cover object-center"
-                                @error="setBannerFailed(plugin.slug)"
-                            />
-                        </div>
-                        <div class="flex flex-1 flex-col gap-3 p-4">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="font-semibold text-zinc-900 dark:text-white">
-                                    {{ plugin.name }}
-                                </span>
-                                <span class="text-xs text-zinc-500 dark:text-zinc-400">
-                                    v{{ plugin.version }}
-                                </span>
+                            <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                        <span class="truncate font-medium text-zinc-900 dark:text-white">
+                                            {{ plugin.name }}
+                                        </span>
+                                        <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                                            v{{ plugin.version }}
+                                        </span>
+                                        <span
+                                            class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300"
+                                        >
+                                            {{ categoryLabel(plugin.category) }}
+                                        </span>
+                                    </div>
+                                    <p
+                                        v-if="plugin.description"
+                                        class="mt-0.5 line-clamp-1 text-sm text-zinc-500 dark:text-zinc-400"
+                                    >
+                                        {{ plugin.description }}
+                                    </p>
+                                    <div class="mt-1 flex flex-wrap items-center gap-3">
+                                        <a
+                                            v-if="plugin.settings_url"
+                                            :href="plugin.settings_url"
+                                            class="inline-flex items-center gap-1 text-xs font-medium text-[var(--color-primary)] hover:underline"
+                                        >
+                                            <ExternalLink class="h-3 w-3" />
+                                            Configurar
+                                        </a>
+                                        <button
+                                            v-if="plugin.type === 'gateway' && plugin.is_enabled"
+                                            type="button"
+                                            class="inline-flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                                            @click="goToGateways"
+                                        >
+                                            <CreditCard class="h-3 w-3" />
+                                            Gateways
+                                        </button>
+                                    </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                                 <span
                                     v-if="!plugin.is_registered"
-                                    class="rounded-md px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-amber-500/15 text-amber-800 dark:text-amber-300"
                                 >
-                                    Pendente de instalação
+                                    Pendente
                                 </span>
-                            </div>
-                            <p
-                                v-if="plugin.description"
-                                class="line-clamp-2 flex-1 text-sm text-zinc-600 dark:text-zinc-400"
-                            >
-                                {{ plugin.description }}
-                            </p>
-                            <span
-                                class="inline-flex w-fit rounded-md px-2 py-0.5 text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300"
-                            >
-                                {{ categoryLabel(plugin.category) }}
-                            </span>
-                            <div class="flex flex-wrap items-center gap-2 pt-1">
-                                <a
-                                    v-if="plugin.settings_url"
-                                    :href="plugin.settings_url"
-                                    class="inline-flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                                <span
+                                    v-else-if="plugin.is_enabled"
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                                 >
-                                    <ExternalLink class="h-3.5 w-3.5" />
-                                    Configurar
-                                </a>
-                                <button
-                                    v-if="plugin.type === 'gateway' && plugin.is_enabled"
-                                    type="button"
-                                    class="inline-flex items-center gap-1 text-xs text-[var(--color-primary)] hover:underline"
-                                    @click="goToGateways"
+                                    Ativo
+                                </span>
+                                <span
+                                    v-else
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400"
                                 >
-                                    <CreditCard class="h-3.5 w-3.5" />
-                                    Gateways
-                                </button>
-                            </div>
-                            <div class="mt-auto flex flex-wrap items-center gap-2">
+                                    Inativo
+                                </span>
+
                                 <template v-if="plugin.is_registered">
                                     <Button
                                         v-if="plugin.is_enabled"
                                         variant="outline"
                                         size="sm"
-                                        class="w-full sm:w-auto"
                                         @click="disablePlugin(plugin.slug)"
                                     >
-                                        <PowerOff class="mr-1 h-4 w-4" />
-                                        Desativar
+                                        <PowerOff class="h-3.5 w-3.5 sm:mr-1" />
+                                        <span class="hidden sm:inline">Desativar</span>
                                     </Button>
                                     <Button
                                         v-else
                                         size="sm"
-                                        class="w-full sm:w-auto"
                                         @click="enablePlugin(plugin.slug)"
                                     >
-                                        <Power class="mr-1 h-4 w-4" />
-                                        Ativar
+                                        <Power class="h-3.5 w-3.5 sm:mr-1" />
+                                        <span class="hidden sm:inline">Ativar</span>
                                     </Button>
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        class="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+                                        class="border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/20"
                                         :disabled="uninstallingSlug === plugin.slug"
+                                        :title="uninstallingSlug === plugin.slug ? 'Excluindo...' : 'Excluir plugin'"
                                         @click="uninstallPlugin(plugin)"
                                     >
-                                        <Trash2 v-if="uninstallingSlug !== plugin.slug" class="mr-1 h-4 w-4" />
-                                        <span v-else class="mr-1">...</span>
-                                        {{ uninstallingSlug === plugin.slug ? 'Excluindo...' : 'Excluir' }}
+                                        <Trash2 class="h-3.5 w-3.5" />
                                     </Button>
                                 </template>
                                 <template v-else>
                                     <Button
                                         size="sm"
-                                        class="w-full sm:w-auto"
                                         :disabled="registeringSlug === plugin.slug"
                                         @click="registerPlugin(plugin.slug)"
                                     >
-                                        <Download v-if="registeringSlug !== plugin.slug" class="mr-1 h-4 w-4" />
-                                        <span v-else class="mr-1 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                        <Download v-if="registeringSlug !== plugin.slug" class="h-3.5 w-3.5 sm:mr-1" />
+                                        <span v-else class="mr-1 inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                                         {{ registeringSlug === plugin.slug ? 'Instalando...' : 'Instalar' }}
                                     </Button>
                                 </template>
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-        </template>
-
-        <!-- Aba Loja de plugins (catálogo em breve; use ZIP na aba Instalados) -->
-        <template v-if="currentTab === 'store'">
-            <section class="relative min-h-[280px] overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/80 dark:border-zinc-700 dark:bg-zinc-900/40">
-                <div
-                    class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center bg-white/85 px-6 text-center backdrop-blur-[2px] dark:bg-zinc-950/80"
-                >
-                    <Package class="mb-4 h-14 w-14 text-zinc-400 dark:text-zinc-500" aria-hidden="true" />
-                    <p class="text-2xl font-semibold text-zinc-800 dark:text-zinc-100">Em breve</p>
-                    <p class="mt-2 max-w-md text-sm text-zinc-600 dark:text-zinc-400">
-                        A loja de plugins estará disponível em breve. Enquanto isso, use a aba
-                        <strong class="font-medium text-zinc-800 dark:text-zinc-200">Instalados</strong>
-                        e o botão <strong class="font-medium text-zinc-800 dark:text-zinc-200">Instalar plugin (ZIP)</strong>.
-                    </p>
-                    <a
-                        v-if="pluginStore?.submit_url"
-                        :href="pluginStore.submit_url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="pointer-events-auto mt-6 inline-flex items-center gap-2 text-sm text-[var(--color-primary)] hover:underline"
-                    >
-                        <Upload class="h-4 w-4" />
-                        Subir meu plugin para loja
-                    </a>
+                        </li>
+                    </ul>
                 </div>
             </section>
         </template>
@@ -563,7 +560,7 @@ function submitManualInstall() {
                         A instalação automática precisa da extensão Zip no PHP. Use uma das opções abaixo.
                     </p>
 
-                    <div class="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <div class="mt-4 panel-card-sm">
                         <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
                             Extrair manualmente no servidor
                         </p>

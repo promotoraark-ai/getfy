@@ -106,7 +106,7 @@ function pluginActions(productId) {
             <div
                 v-for="p in produtosList"
                 :key="p.id"
-                class="group relative flex flex-row gap-3 rounded-xl border border-zinc-200 bg-white p-3 pr-2 shadow-sm transition hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800"
+                class="group relative flex flex-row gap-3 panel-card p-3 pr-2 transition hover:border-zinc-200 dark:hover:border-zinc-600"
             >
                 <!-- Coluna da imagem: clicável → edição -->
                 <Link
@@ -255,7 +255,7 @@ function pluginActions(productId) {
 
         <div
             v-if="!produtosList.length"
-            class="flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 py-16 dark:border-zinc-700"
+            class="panel-card-dashed flex flex-col items-center justify-center py-16"
         >
             <Package class="h-14 w-14 text-zinc-400 dark:text-zinc-500" />
             <p class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto ainda.</p>

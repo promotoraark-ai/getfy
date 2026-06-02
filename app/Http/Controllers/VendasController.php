@@ -5,17 +5,20 @@ namespace App\Http\Controllers;
 use App\Events\OrderCompleted;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductAffiliate;
 use App\Models\ProductOffer;
+use App\Support\AffiliateAttribution;
 use App\Models\OrderItem;
 use App\Models\Subscription;
 use App\Services\AccessEmailService;
+use App\Services\ProducerSaleAmount;
 use App\Services\RefundService;
 use App\Services\TeamAccessService;
 use App\Support\OrderCurrencyTotals;
-use App\Support\ReportingPeriod;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -60,8 +63,38 @@ class VendasController extends Controller
             return $query;
         }
 
-        [$start, $end] = ReportingPeriod::boundsForVendas($period, $from, $to);
-        ReportingPeriod::applyCreatedAtBounds($query, $start, $end);
+        $tz = config('app.timezone', 'America/Sao_Paulo');
+        $now = now($tz);
+        $start = null;
+        $end = null;
+
+        if ($period === 'today') {
+            $start = $now->copy()->startOfDay();
+            $end = $now->copy()->endOfDay();
+        } elseif ($period === '7d') {
+            $start = $now->copy()->subDays(6)->startOfDay();
+            $end = $now->copy()->endOfDay();
+        } elseif ($period === '30d') {
+            $start = $now->copy()->subDays(29)->startOfDay();
+            $end = $now->copy()->endOfDay();
+        } elseif ($period === 'this_month') {
+            $start = $now->copy()->startOfMonth()->startOfDay();
+            $end = $now->copy()->endOfDay();
+        } elseif ($period === 'last_month') {
+            $start = $now->copy()->subMonthNoOverflow()->startOfMonth()->startOfDay();
+            $end = $now->copy()->subMonthNoOverflow()->endOfMonth()->endOfDay();
+        } elseif ($period === 'custom') {
+            $start = $from ? \Illuminate\Support\Carbon::parse($from, $tz)->startOfDay() : null;
+            $end = $to ? \Illuminate\Support\Carbon::parse($to, $tz)->endOfDay() : null;
+        }
+
+        if ($start && $end) {
+            $query->whereBetween('created_at', [$start, $end]);
+        } elseif ($start) {
+            $query->where('created_at', '>=', $start);
+        } elseif ($end) {
+            $query->where('created_at', '<=', $end);
+        }
 
         return $query;
     }
@@ -212,7 +245,7 @@ class VendasController extends Controller
         $tenantId = auth()->user()->tenant_id;
         [$filteredQuery, $statusFilter] = $this->buildFilteredQuery($request, $tenantId);
 
-        $vendas = $filteredQuery
+        $paginator = $filteredQuery
             ->with([
                 'product:id,name,slug,checkout_slug',
                 'user:id,name,email',
@@ -223,11 +256,16 @@ class VendasController extends Controller
                 'orderItems.productOffer:id,name',
                 'orderItems.subscriptionPlan:id,name',
                 'checkoutSession:id,order_id,utm_source,utm_medium,utm_campaign',
+                'commissionEntries:id,order_id,role,commission_amount',
             ])
             ->orderByDesc('created_at')
             ->paginate(20)
-            ->withQueryString()
-            ->through(function (Order $o) {
+            ->withQueryString();
+
+        $affiliateLookup = $this->affiliateLookupForOrders($paginator->getCollection());
+        $producerSaleAmount = app(ProducerSaleAmount::class);
+
+        $vendas = $paginator->through(function (Order $o) use ($affiliateLookup, $producerSaleAmount) {
                 $arr = $o->toArray();
                 $arr['currency'] = $o->getCurrencyOrDefault();
                 $arr['gateway_label'] = $o->paymentMethodDisplayLabel();
@@ -235,9 +273,31 @@ class VendasController extends Controller
                 $arr['checkout_url'] = url('/c/'.$o->getCheckoutSlug());
                 $arr['payment_type_label'] = $this->paymentTypeLabel($o);
                 $arr['amount_total'] = $o->lineItemsTotalAmount();
-                $refundCheck = app(RefundService::class)->canRefundFromPanel($o);
-                $arr['can_refund'] = $refundCheck['can'];
-                $arr['refund_auto_cajupay_pix'] = $refundCheck['auto_cajupay_pix'];
+                $producerAmount = $producerSaleAmount->forOrder($o);
+                $arr['display_amount'] = $producerAmount['amount'];
+                $arr['display_amount_is_producer_share'] = $producerAmount['is_producer_share'];
+                $arr['display_amount_is_estimated'] = $producerAmount['is_estimated'];
+                $arr['sale_gross_total'] = $producerAmount['gross_total'];
+                $arr['sale_channel'] = $o->saleChannel();
+                $arr['is_affiliate_sale'] = $o->saleChannel() === 'affiliate';
+                $affiliateKey = $o->product_id.':'.($o->affiliateCode() ?? '');
+                $affiliate = $affiliateLookup->get($affiliateKey);
+                $arr['affiliate'] = $affiliate ? [
+                    'code' => $affiliate['code'],
+                    'name' => $affiliate['name'],
+                ] : null;
+                try {
+                    $refundCheck = app(RefundService::class)->canRefundFromPanel($o);
+                    $arr['can_refund'] = $refundCheck['can'];
+                    $arr['refund_auto_cajupay_pix'] = $refundCheck['auto_cajupay_pix'];
+                } catch (\Throwable $e) {
+                    Log::warning('VendasController::index canRefundFromPanel', [
+                        'order_id' => $o->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                    $arr['can_refund'] = false;
+                    $arr['refund_auto_cajupay_pix'] = false;
+                }
 
                 return $arr;
             });
@@ -246,7 +306,18 @@ class VendasController extends Controller
 
         $vendasEncontradas = (clone $statsQuery)->count();
 
-        $valorPorMoeda = OrderCurrencyTotals::valorPorMoedaFromQuery($statsQuery);
+        try {
+            $valorPorMoeda = OrderCurrencyTotals::valorPorMoedaFromQuery($statsQuery);
+        } catch (\Throwable $e) {
+            Log::error('VendasController::index valorPorMoeda', [
+                'message' => $e->getMessage(),
+                'tenant_id' => $tenantId,
+            ]);
+            $fallbackTotal = (float) (clone $statsQuery)->where('status', 'completed')->sum('amount');
+            $valorPorMoeda = $fallbackTotal > 0
+                ? [['currency' => 'BRL', 'total' => round($fallbackTotal, 2)]]
+                : [];
+        }
 
         $vendasPix = (clone $statsQuery)
             ->where(function ($q) {
@@ -350,11 +421,16 @@ class VendasController extends Controller
                 'product:id,name',
                 'user:id,name,email',
                 'orderItems:id,order_id,amount',
+                'commissionEntries:id,order_id,role,commission_amount',
             ])
             ->orderByDesc('created_at')
             ->get();
 
-        $rows = $vendas->map(function (Order $o) {
+        $producerSaleAmount = app(ProducerSaleAmount::class);
+
+        $rows = $vendas->map(function (Order $o) use ($producerSaleAmount) {
+            $display = $producerSaleAmount->forOrder($o);
+
             return [
                 'data' => $o->created_at?->format('d/m/Y H:i'),
                 'produto' => $this->productDisplayName($o),
@@ -363,7 +439,7 @@ class VendasController extends Controller
                 'status' => $this->statusLabel($o->status),
                 'gateway' => $o->paymentMethodDisplayLabel(),
                 'moeda' => $o->getCurrencyOrDefault(),
-                'valor_liquido' => number_format($o->lineItemsTotalAmount(), 2, ',', '.'),
+                'valor_liquido' => number_format($display['amount'], 2, ',', '.'),
             ];
         })->all();
 
@@ -483,13 +559,25 @@ class VendasController extends Controller
                     ]);
                 }
             }
-
-            event(new OrderCompleted($order));
         } catch (\Throwable $e) {
             return response()->json([
                 'success' => false,
                 'message' => 'Pedido marcado como pago, mas houve um erro ao conceder acesso: '.$e->getMessage(),
             ], 500);
+        }
+
+        try {
+            event(new OrderCompleted($order));
+        } catch (\Throwable $e) {
+            Log::error('VendasController::approve OrderCompleted falhou', [
+                'order_id' => $order->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Pedido aprovado e acesso concedido. Houve falha ao disparar integrações (webhook/Meta/Utmify): '.$e->getMessage(),
+            ]);
         }
 
         return response()->json(['success' => true, 'message' => 'Pedido aprovado. O e-mail de acesso foi enviado ao cliente.']);
@@ -560,5 +648,42 @@ class VendasController extends Controller
         }
 
         return 'Pagamento único';
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Order>  $orders
+     * @return \Illuminate\Support\Collection<string, array{code: string, name: string|null}>
+     */
+    private function affiliateLookupForOrders($orders): \Illuminate\Support\Collection
+    {
+        $productIds = $orders
+            ->filter(fn (Order $o) => $o->saleChannel() === 'affiliate' && $o->affiliateCode() && $o->product_id)
+            ->pluck('product_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($productIds === []) {
+            return collect();
+        }
+
+        $lookup = collect();
+        ProductAffiliate::query()
+            ->with('user:id,name')
+            ->whereIn('product_id', $productIds)
+            ->where('status', ProductAffiliate::STATUS_APPROVED)
+            ->get()
+            ->each(function (ProductAffiliate $affiliate) use ($lookup) {
+                $code = AffiliateAttribution::normalizeRef($affiliate->affiliate_code);
+                if ($code === null) {
+                    return;
+                }
+                $lookup->put($affiliate->product_id.':'.$code, [
+                    'code' => $affiliate->affiliate_code,
+                    'name' => $affiliate->user?->name,
+                ]);
+            });
+
+        return $lookup;
     }
 }

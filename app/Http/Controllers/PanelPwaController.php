@@ -33,32 +33,55 @@ class PanelPwaController extends Controller
             $icons[] = ['src' => $src, 'sizes' => $sizes, 'type' => 'image/png', 'purpose' => 'maskable'];
         };
 
-        $pwa192 = config('getfy.pwa_icon_192');
-        $pwa512 = config('getfy.pwa_icon_512');
-        if (is_string($pwa192) && $pwa192 !== '' && is_string($pwa512) && $pwa512 !== '') {
+        $resolveIconUrl = static function (?string $path): ?string {
+            if (! is_string($path) || $path === '') {
+                return null;
+            }
+            if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+                return $path;
+            }
+
+            return url('/'.ltrim($path, '/'));
+        };
+
+        $pwa192 = $resolveIconUrl(config('getfy.pwa_icon_192'));
+        $pwa512 = $resolveIconUrl(config('getfy.pwa_icon_512'));
+        $pwaSingle = $resolveIconUrl(config('getfy.pwa_icon'));
+
+        if ($pwa192 !== null && $pwa512 !== null) {
             $addIconVariants($pwa192, '192x192');
             $addIconVariants($pwa512, '512x512');
+        } elseif ($pwaSingle !== null) {
+            $addIconVariants($pwaSingle, '192x192');
+            $addIconVariants($pwaSingle, '512x512');
         } else {
             $iconsDir = public_path('icons');
-            $has192 = is_file($iconsDir.'/icon-192x192.png');
-            $has512 = is_file($iconsDir.'/icon-512x512.png');
-            $icon192Url = url('/icons/icon-192x192.png');
-            $icon512Url = url('/icons/icon-512x512.png');
+            $defaultIcon = $iconsDir.DIRECTORY_SEPARATOR.'icon.png';
+            if (is_file($defaultIcon)) {
+                $iconUrl = url('/icons/icon.png');
+                $addIconVariants($iconUrl, '192x192');
+                $addIconVariants($iconUrl, '512x512');
+            } else {
+                $has192 = is_file($iconsDir.'/icon-192x192.png');
+                $has512 = is_file($iconsDir.'/icon-512x512.png');
+                $icon192Url = url('/icons/icon-192x192.png');
+                $icon512Url = url('/icons/icon-512x512.png');
 
-            if ($has192) {
-                $addIconVariants($icon192Url, '192x192');
-            }
-            if ($has512) {
-                $addIconVariants($icon512Url, '512x512');
-            }
-            if (empty($icons)) {
-                $fallbackIcon = (string) config('getfy.app_logo_icon', 'https://cdn.getfy.cloud/collapsed-logo.png');
-                $addIconVariants($fallbackIcon, '192x192');
-                $addIconVariants($fallbackIcon, '512x512');
-            } elseif ($has512 && ! $has192) {
-                $addIconVariants($icon512Url, '192x192');
-            } elseif ($has192 && ! $has512) {
-                $addIconVariants($icon192Url, '512x512');
+                if ($has192) {
+                    $addIconVariants($icon192Url, '192x192');
+                }
+                if ($has512) {
+                    $addIconVariants($icon512Url, '512x512');
+                }
+                if (empty($icons)) {
+                    $fallbackIcon = (string) config('getfy.app_logo_icon', 'https://cdn.getfy.cloud/collapsed-logo.png');
+                    $addIconVariants($fallbackIcon, '192x192');
+                    $addIconVariants($fallbackIcon, '512x512');
+                } elseif ($has512 && ! $has192) {
+                    $addIconVariants($icon512Url, '192x192');
+                } elseif ($has192 && ! $has512) {
+                    $addIconVariants($icon192Url, '512x512');
+                }
             }
         }
 
@@ -66,7 +89,7 @@ class PanelPwaController extends Controller
             'id' => '/',
             'name' => $appName,
             'short_name' => $appName,
-            'start_url' => '/login',
+            'start_url' => '/dashboard',
             'scope' => '/',
             'display' => 'standalone',
             'background_color' => '#18181b',
@@ -88,6 +111,7 @@ class PanelPwaController extends Controller
             'keys' => ['required', 'array'],
             'keys.auth' => ['required', 'string'],
             'keys.p256dh' => ['required', 'string'],
+            'renewed' => ['sometimes', 'boolean'],
         ]);
 
         $user = $request->user();
@@ -108,6 +132,8 @@ class PanelPwaController extends Controller
                 'tenant_id' => $user->tenant_id,
                 'keys' => $keys,
                 'user_agent' => $request->userAgent(),
+                'push_fail_count' => 0,
+                'last_push_failed_at' => null,
             ]
         );
 
@@ -115,6 +141,7 @@ class PanelPwaController extends Controller
             'success' => true,
             'subscribed' => true,
             'subscription_id' => $subscription->id,
+            'renewed' => (bool) ($validated['renewed'] ?? false),
             'updated_at' => $subscription->updated_at?->toISOString(),
         ]);
     }

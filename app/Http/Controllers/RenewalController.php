@@ -13,7 +13,6 @@ use App\Models\Order;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Services\EfiPixRecorrenteService;
-use App\Models\Setting;
 use App\Services\GeoIp;
 use App\Support\CheckoutCurrencyCatalog;
 use App\Services\PaymentService;

@@ -79,7 +79,7 @@ function submitPassword() {
         </div>
 
         <!-- Card: Foto e dados -->
-        <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+        <div class="panel-table">
             <div class="p-6 sm:p-8">
                 <div class="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
                     <div class="relative shrink-0">
@@ -204,7 +204,7 @@ function submitPassword() {
         </div>
 
         <!-- Card: Alterar senha -->
-        <div class="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+        <div class="panel-table">
             <div class="border-b border-zinc-200 px-6 py-4 dark:border-zinc-700 sm:px-8">
                 <div class="flex items-center gap-2">
                     <span

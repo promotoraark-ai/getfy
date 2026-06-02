@@ -79,6 +79,8 @@ export async function mountCajuPayCheckout(containerSelector, opts) {
     if (!instance?.mountCheckout) {
         throw new Error('CajuPay SDK não expõe mountCheckout().');
     }
+    // Omitimos `locale` no mount: o widget herda o locale da sessão criada no servidor
+    // (POST /api/sdk/v1/checkout/sessions). Ver doc CajuPay módulo 05 — prioridade.
     return await instance.mountCheckout(containerSelector, {
         token: opts.token,
         defaultMethod: opts.defaultMethod || 'card',

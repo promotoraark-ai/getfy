@@ -336,42 +336,42 @@ const chartOptionsFormas = computed(() => ({
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <CircleDollarSign class="h-5 w-5" />
                     <span class="text-sm font-medium">Receita total</span>
                 </div>
                 <p class="mt-2 text-xl font-bold text-zinc-900 dark:text-white">{{ displayCurrency(receita_total) }}</p>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <ShoppingCart class="h-5 w-5" />
                     <span class="text-sm font-medium">Vendas</span>
                 </div>
                 <p class="mt-2 text-xl font-bold text-zinc-900 dark:text-white">{{ displayNumber(quantidade_vendas) }}</p>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <TrendingUp class="h-5 w-5" />
                     <span class="text-sm font-medium">Ticket médio</span>
                 </div>
                 <p class="mt-2 text-xl font-bold text-zinc-900 dark:text-white">{{ displayCurrency(ticket_medio) }}</p>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <Users class="h-5 w-5" />
                     <span class="text-sm font-medium">Alunos</span>
                 </div>
                 <p class="mt-2 text-xl font-bold text-zinc-900 dark:text-white">{{ displayNumber(total_alunos) }}</p>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <Package class="h-5 w-5" />
                     <span class="text-sm font-medium">Produtos</span>
                 </div>
                 <p class="mt-2 text-xl font-bold text-zinc-900 dark:text-white">{{ displayNumber(total_produtos) }}</p>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <XCircle class="h-5 w-5" />
                     <span class="text-sm font-medium">Vendas abandonadas</span>
@@ -382,7 +382,7 @@ const chartOptionsFormas = computed(() => ({
         </div>
 
         <div class="grid gap-4 lg:grid-cols-2">
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Receita por período</h2>
                 <div class="mt-4 min-h-[260px]">
                     <VueApexCharts
@@ -397,7 +397,7 @@ const chartOptionsFormas = computed(() => ({
                     </p>
                 </div>
             </div>
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <div class="panel-card-md">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Receita por produto (top 10)</h2>
                 <div class="mt-4 min-h-[260px]">
                     <VueApexCharts
@@ -415,7 +415,7 @@ const chartOptionsFormas = computed(() => ({
         </div>
 
         <div class="grid gap-4 lg:grid-cols-3">
-            <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50 lg:col-span-2">
+            <div class="panel-card-md lg:col-span-2">
                 <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <CreditCard class="h-4 w-4 text-zinc-500" />
                     Formas de pagamento
@@ -438,7 +438,7 @@ const chartOptionsFormas = computed(() => ({
                 </ul>
             </div>
             <div class="space-y-4">
-                <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <div class="panel-card-md">
                     <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Distribuição</h2>
                     <div class="mt-4 min-h-[160px]">
                         <VueApexCharts
@@ -453,7 +453,7 @@ const chartOptionsFormas = computed(() => ({
                         </p>
                     </div>
                 </div>
-                <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+                <div class="panel-card-sm">
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                         <RotateCcw class="h-4 w-4" />
                         <span class="text-sm font-medium">Reembolsos</span>
@@ -464,7 +464,7 @@ const chartOptionsFormas = computed(() => ({
             </div>
         </div>
 
-        <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">
+        <div class="panel-card-md">
             <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                 <XCircle class="h-4 w-4 text-zinc-500" />
                 Vendas abandonadas com e-mail (para recuperação)

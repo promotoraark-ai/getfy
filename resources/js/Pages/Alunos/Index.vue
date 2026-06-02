@@ -277,7 +277,7 @@ onUnmounted(() => {
         <!-- Cards de métricas -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <Users class="h-5 w-5" />
@@ -288,7 +288,7 @@ onUnmounted(() => {
                 </p>
             </div>
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <BookOpen class="h-5 w-5" />
@@ -299,7 +299,7 @@ onUnmounted(() => {
                 </p>
             </div>
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <Package class="h-5 w-5" />
@@ -310,7 +310,7 @@ onUnmounted(() => {
                 </p>
             </div>
             <div
-                class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50"
+                class="panel-card-md"
             >
                 <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
                     <UserPlus class="h-5 w-5" />
@@ -439,7 +439,7 @@ onUnmounted(() => {
             <div
                 v-for="a in alunosList"
                 :key="a.id"
-                class="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/80"
+                class="panel-card-sm transition hover:opacity-95 dark:hover:opacity-95"
                 role="button"
                 tabindex="0"
                 @click="openDetail(a)"
@@ -468,7 +468,7 @@ onUnmounted(() => {
         </div>
 
         <div
-            class="hidden overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-800/80 sm:block"
+            class="hidden panel-table sm:block"
         >
             <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
                 <thead class="bg-zinc-50 dark:bg-zinc-800">
@@ -488,7 +488,7 @@ onUnmounted(() => {
                     <tr
                         v-for="a in alunosList"
                         :key="a.id"
-                        class="cursor-pointer bg-white transition hover:bg-zinc-50 dark:bg-zinc-800/60 dark:hover:bg-zinc-700/80"
+                        class="cursor-pointer transition hover:bg-zinc-100/80 dark:hover:bg-zinc-700/50"
                         @click="openDetail(a)"
                     >
                         <td class="whitespace-nowrap px-4 py-3 text-sm font-medium text-zinc-900 dark:text-white">
@@ -512,7 +512,7 @@ onUnmounted(() => {
 
         <div
             v-if="!alunosList.length"
-            class="sm:hidden rounded-xl border border-zinc-200 bg-white px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400"
+            class="sm:hidden panel-card px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400"
         >
             Nenhum aluno com acesso ainda.
         </div>

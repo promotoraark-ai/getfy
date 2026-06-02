@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { Link, usePage } from '@inertiajs/vue3';
 import { LayoutDashboard, CircleDollarSign, Package, Settings } from 'lucide-vue-next';
 import { usePwaInstall } from '@/composables/usePwaInstall';
+import { isNavItemActive } from '@/lib/nav';
 
 const page = usePage();
 const { isStandalone } = usePwaInstall('painel');
@@ -22,9 +23,7 @@ const SCROLL_THRESHOLD = 20;
 const TOP_THRESHOLD = 80;
 
 function isActive(href) {
-    const url = page.url;
-    if (href === '/dashboard') return url === '/dashboard' || url === '/';
-    return url === href || url.startsWith(href + '/');
+    return isNavItemActive(page.url, href);
 }
 
 const panelNavPrefetch = ['hover', 'click'];

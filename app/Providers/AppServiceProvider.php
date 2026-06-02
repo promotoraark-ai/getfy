@@ -30,7 +30,9 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use App\Models\PayoutRequest;
 use App\Plugins\PluginRegistry;
+use Illuminate\Support\Facades\Route;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -88,6 +90,7 @@ class AppServiceProvider extends ServiceProvider
         $this->fallbackRedisToDatabase();
         $this->fallbackInvalidQueueConnectionToSync();
         $this->bootCloudFolder();
+        $this->bootRouteBindings();
         if (DockerSetupState::isDocker() && class_exists(\Illuminate\Support\Facades\Vite::class)) {
             \Illuminate\Support\Facades\Vite::useHotFile(storage_path('framework/vite.hot'));
         }
@@ -148,10 +151,18 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute($checkoutShowPerMinute)->by($request->ip());
         });
 
+        $payoutPerMinute = max(1, (int) config('commissions.payout_rate_limit_per_minute', 3));
+        RateLimiter::for('payout', function (Request $request) use ($payoutPerMinute) {
+            $key = $request->user()?->id ?: $request->ip();
+
+            return Limit::perMinute($payoutPerMinute)->by('payout|'.$key);
+        });
+
         Queue::after(function (): void {
             Cache::put('queue_heartbeat', now()->toIso8601String(), now()->addMinutes(5));
         });
 
+        Event::listen(OrderCompleted::class, \App\Listeners\AllocateCommissionsOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, SendAccessEmailOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, SendPanelPushOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, SendMetaPurchaseCapiOnOrderCompleted::class);
@@ -351,5 +362,20 @@ class AppServiceProvider extends ServiceProvider
         if (! array_key_exists($default, $connections)) {
             config(['queue.default' => 'sync']);
         }
+    }
+
+    private function bootRouteBindings(): void
+    {
+        Route::bind('payout', function (string $value) {
+            $user = auth()->user();
+            if (! $user) {
+                abort(403);
+            }
+
+            return PayoutRequest::query()
+                ->where('tenant_id', $user->tenant_id)
+                ->whereKey($value)
+                ->firstOrFail();
+        });
     }
 }

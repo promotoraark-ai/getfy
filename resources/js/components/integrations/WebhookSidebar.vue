@@ -376,7 +376,16 @@ function truncateUrl(url, max = 40) {
                 <div class="flex flex-1 flex-col overflow-y-auto">
                     <!-- Lista de webhooks (visível quando não está criando/editando) -->
                     <template v-if="!showingForm">
-                        <div class="p-4">
+                        <div class="space-y-3 p-4">
+                            <p class="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                                O corpo inclui <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">products[]</code>,
+                                <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">product</code>,
+                                <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">offer</code>,
+                                <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">payment</code> e
+                                <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">tracking</code>
+                                (além de <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">order</code> e
+                                <code class="rounded bg-zinc-100 px-1 dark:bg-zinc-800">customer</code>).
+                            </p>
                             <Button
                                 variant="outline"
                                 size="sm"

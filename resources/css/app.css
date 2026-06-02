@@ -58,6 +58,48 @@
     @apply text-zinc-500 dark:text-zinc-500;
 }
 
+/** Ícone de métrica na dashboard: só o ícone na cor primária */
+@utility dash-metric-icon-sm {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center text-[var(--color-primary)];
+}
+
+@utility dash-metric-icon-md {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center text-[var(--color-primary)];
+}
+
+@utility panel-metric-icon-sm {
+    @apply flex h-9 w-9 shrink-0 items-center justify-center text-[var(--color-primary)];
+}
+
+@utility panel-metric-icon-md {
+    @apply flex h-10 w-10 shrink-0 items-center justify-center text-[var(--color-primary)];
+}
+
+/** Cards do painel (mesmo padrão da dashboard) */
+@utility panel-card {
+    @apply rounded-xl border border-zinc-50 bg-zinc-50 dark:border-zinc-800/60 dark:bg-zinc-900/60;
+}
+
+@utility panel-card-sm {
+    @apply rounded-xl border border-zinc-50 bg-zinc-50 p-4 dark:border-zinc-800/60 dark:bg-zinc-900/60;
+}
+
+@utility panel-card-md {
+    @apply rounded-xl border border-zinc-50 bg-zinc-50 p-5 dark:border-zinc-800/60 dark:bg-zinc-900/60;
+}
+
+@utility panel-card-lg {
+    @apply rounded-xl border border-zinc-50 bg-zinc-50 p-6 dark:border-zinc-800/60 dark:bg-zinc-900/60;
+}
+
+@utility panel-table {
+    @apply overflow-hidden rounded-xl border border-zinc-50 bg-zinc-50 dark:border-zinc-800/60 dark:bg-zinc-900/60;
+}
+
+@utility panel-card-dashed {
+    @apply rounded-xl border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900/60;
+}
+
 @utility no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -97,12 +139,12 @@
         background: rgb(113 113 122); /* zinc-500 */
     }
     .dark *::-webkit-scrollbar-thumb {
-        background: rgb(82 82 91); /* zinc-600 */
-    }
-    .dark *::-webkit-scrollbar-thumb:hover {
         background: rgb(63 63 70); /* zinc-700 */
     }
+    .dark *::-webkit-scrollbar-thumb:hover {
+        background: rgb(82 82 91); /* zinc-600 */
+    }
     .dark *::-webkit-scrollbar-thumb:active {
-        background: rgb(39 39 42); /* zinc-800 */
+        background: rgb(113 113 122); /* zinc-500 */
     }
 }

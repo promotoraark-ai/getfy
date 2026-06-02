@@ -5,6 +5,7 @@ import PwaInstallPrompt from '@/components/member-area/PwaInstallPrompt.vue';
 import MemberAreaNotificationsPanel from '@/components/member-area/MemberAreaNotificationsPanel.vue';
 import Button from '@/components/ui/Button.vue';
 import { Bell, ChevronDown, User, X, Camera, Lock, CheckCircle, AlertCircle, Menu, Trophy, RotateCcw } from 'lucide-vue-next';
+import { ensurePushSubscription, attachServiceWorkerPushListeners } from '@/lib/pushSubscription';
 
 const page = usePage();
 const props = computed(() => page.props);
@@ -370,82 +371,82 @@ function shouldAutoPromptPush() {
     return true;
 }
 
-function urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-    for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-    return outputArray;
+function memberPushScope() {
+    if (!baseUrl.value) {
+        return null;
+    }
+    return baseUrl.value.endsWith('/') ? baseUrl.value : `${baseUrl.value}/`;
 }
 
-function serializeSubscription(sub) {
-    const p256dh = sub?.getKey?.('p256dh');
-    const auth = sub?.getKey?.('auth');
-    return {
-        endpoint: sub?.endpoint,
-        keys: {
-            p256dh: p256dh ? btoa(String.fromCharCode.apply(null, new Uint8Array(p256dh))) : '',
-            auth: auth ? btoa(String.fromCharCode.apply(null, new Uint8Array(auth))) : '',
+async function runMemberEnsurePush({ forceRenew = false } = {}) {
+    if (!canRegisterPush.value || !vapid_public.value) {
+        return false;
+    }
+    const scope = memberPushScope();
+    if (!scope) {
+        return false;
+    }
+    const subscribeUrl = `${scope}push-subscribe`;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+    const result = await ensurePushSubscription({
+        swScriptUrl: `${scope}sw.js`,
+        swScope: scope,
+        vapidPublic: vapid_public.value,
+        forceRenew,
+        syncToServer: async (payload) => {
+            const res = await fetch(subscribeUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            return res.ok && !!data?.success;
         },
-    };
-}
-
-async function syncMemberPushSubscription(sub, subscribeUrl, csrf) {
-    const body = serializeSubscription(sub);
-    if (!body.endpoint || !body.keys?.p256dh || !body.keys?.auth) {
-        throw new Error('Subscription inválida para sincronização.');
-    }
-    const res = await fetch(subscribeUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-        body: JSON.stringify(body),
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success) {
-        throw new Error(data?.message || 'Não foi possível sincronizar a inscrição de notificações.');
-    }
-    return true;
+
+    pushRegistered.value = result.ok;
+    return result.ok;
 }
 
 /** Verifica se já existe subscription no browser e atualiza pushRegistered (para o painel de notificações). */
 async function checkExistingSubscriptionForPanel() {
-    if (!canRegisterPush.value || typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistration) return;
-    const scope = baseUrl.value ? (baseUrl.value.endsWith('/') ? baseUrl.value : baseUrl.value + '/') : null;
-    if (!scope) return;
+    if (!canRegisterPush.value || typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistration) {
+        return;
+    }
     try {
-        const reg = await navigator.serviceWorker.getRegistration(scope);
-        const existing = await reg?.pushManager?.getSubscription?.();
-        if (!existing) return;
-        const subscribeUrl = `${scope}push-subscribe`;
-        const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
-        await syncMemberPushSubscription(existing, subscribeUrl, csrf);
-        pushRegistered.value = true;
+        await runMemberEnsurePush();
     } catch (e) {
         console.warn('MemberArea push sync failed (panel check):', e);
     }
 }
 
-async function registerPushSubscription() {
-    if (!canRegisterPush.value || pushSubscribing.value) return false;
-    const scope = baseUrl.value.endsWith('/') ? baseUrl.value : baseUrl.value + '/';
-    const swUrl = `${scope}sw.js`;
-    const subscribeUrl = `${scope}push-subscribe`;
-    const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+async function registerPushSubscription({ forceRenew = false } = {}) {
+    if (!canRegisterPush.value || pushSubscribing.value) {
+        return false;
+    }
+    const scope = memberPushScope();
+    if (!scope) {
+        return false;
+    }
+
     pushSubscribing.value = true;
     pushAutoPromptAttempted.value = true;
     try {
-        const reg = await navigator.serviceWorker.register(swUrl, { scope });
-        const existing = await reg.pushManager?.getSubscription?.();
-        const sub = existing || await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(vapid_public.value),
+        const reg = await navigator.serviceWorker.register(`${scope}sw.js`, { scope });
+        attachServiceWorkerPushListeners(reg, () => {
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                runMemberEnsurePush({ forceRenew: true }).catch(() => {});
+            }
         });
-        await syncMemberPushSubscription(sub, subscribeUrl, csrf);
-        pushRegistered.value = true;
-        return true;
+        return await runMemberEnsurePush({ forceRenew });
     } catch (e) {
-        if (e.name === 'NotAllowedError') {
+        if (e?.name === 'NotAllowedError') {
             try {
                 localStorage.setItem(PUSH_PROMPT_DISMISSED_KEY.value, Date.now().toString());
             } catch (_) {}
@@ -472,14 +473,13 @@ onMounted(() => {
     }
     if (scope && typeof navigator !== 'undefined' && navigator.serviceWorker) {
         navigator.serviceWorker.register(`${scope}sw.js`, { scope }).then(async (reg) => {
+            attachServiceWorkerPushListeners(reg, () => {
+                runMemberEnsurePush({ forceRenew: true }).catch(() => {});
+            });
             if (reg.pushManager && canRegisterPush.value) {
                 try {
-                    const existing = await reg.pushManager.getSubscription();
-                    if (existing) {
-                        const subscribeUrl = `${scope}push-subscribe`;
-                        const csrf = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
-                        await syncMemberPushSubscription(existing, subscribeUrl, csrf);
-                        pushRegistered.value = true;
+                    const ok = await runMemberEnsurePush();
+                    if (ok) {
                         return;
                     }
                 } catch (e) {

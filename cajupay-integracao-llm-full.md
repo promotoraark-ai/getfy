@@ -1,5 +1,5 @@
 # CajuPay — Documentação completa para LLMs
-> Gerado em 2026-05-22T00:41:05.548Z. Não edite à mão — rode `npm run build:llm-docs` no frontend.
+> Gerado em 2026-06-02T12:18:59.357Z. Não edite à mão — rode `npm run build:llm-docs` no frontend.
 > Pacote modular: https://cajupay.com.br/docs/llm/
 ---
 
@@ -20,6 +20,7 @@
 6. **Rotas tipo `/checkout/cajupay/*` não existem na CajuPay** — o integrador implementa wrappers no próprio backend; a API nativa é `/api/sdk/v1/...` e `/api/payments/pix`.
 7. **Wallets:** filtrar Apple Pay (iOS) vs Google Pay (Android/desktop); passar `defaultMethod` igual ao botão clicado; ocultar botão "Pagar" do host quando wallet estiver selecionada.
 8. Ao gerar código, inclua tratamento de `methods_available`, webhooks HMAC e materialização de pedido **antes** do webhook de pagamento aprovado.
+9. **PIX:** webhook outbound + job de reconciliação em background (`GET /api/payments` no servidor, ~1–2 min) — módulo **21**.
 
 ## URLs oficiais
 
@@ -41,14 +42,14 @@ Sempre. Cole no início do contexto da IA junto com os módulos específicos do 
 
 | Objetivo do parceiro | Módulos além deste (00) |
 |----------------------|-------------------------|
-| **Só receber PIX** | 02, 03, 10, 12 (opcional), 16 |
+| **Só receber PIX** | 02, 03, 10, 12, **21**, 16 |
 | **Checkout embed cartão** | 01, 02, 03, 04, 05, 06, 11, 15, 16 |
 | **+ Apple Pay + Google Pay** | Acima + 07, 08, 09, 17 |
 | **Split de comissão** | 13 |
 | **Saques / carteira** | 14 |
 | **Reembolso PIX (API)** | 18 (+ 12 webhook) |
 | **MED PIX (consulta + defesa)** | 19 (+ 12 webhook) |
-| **PIX completo (cobrança + pós-venda)** | 10, 12, 18, 19, 16 |
+| **PIX completo (cobrança + pós-venda)** | 10, 12, **21**, 18, 19, 16 |
 | **Tudo** | `bundle/full.md` ou todos os `*.md` |
 
 ## Duas trilhas de pagamento (não misturar)
@@ -153,6 +154,10 @@ sequenceDiagram
 - Dados de cartão **não** trafegam pelo servidor do integrador.
 - O backend do parceiro só: cria sessão, persiste pedido, valida webhooks.
 - Coleta de cartão: iframe do SDK (formulário embed) → `POST /api/sdk/public/.../confirm`.
+
+## Multi-moeda (Caju Global)
+
+Cartão, boleto e wallets aceitam `currency` ISO 4217 (ex. `USD`, `EUR`). PIX permanece **BRL**. Detalhes: módulo `20-multi-currency`.
 
 ## Contrato CajuPay — criar sessão (servidor)
 
@@ -395,6 +400,7 @@ Com Redis habilitado: limite por API Key ou IP. Webhook inbound PSP (`POST /webh
 2. **Não** use `min-height` fixo no slot do SDK — gera faixa branca abaixo do widget.
 3. Loading/spinner fica **fora** do slot, no layout do host.
 4. Ao trocar método ou `token`: `controller.destroy()` + `innerHTML = ''` + remount.
+5. Textos **dentro** do slot SDK (cartão, wallet, rótulos padrão) seguem `locale` da sessão ou do `mountCheckout` (módulo 05). Títulos, labels e botões **fora** do slot são responsabilidade do host.
 
 ## Quando usar este módulo
 
@@ -495,6 +501,7 @@ async function mountForMethod(method, sessionToken) {
 - [ ] Borda/fundo na caixa pai, não no slot
 - [ ] Botão Pagar do host oculto para wallets
 - [ ] destroy ao trocar método
+- [ ] `locale` alinhado ao idioma da página (sessão e/ou `mountCheckout`)
 
 ---
 
@@ -512,7 +519,7 @@ async function mountForMethod(method, sessionToken) {
 
 ## Quando usar este módulo
 
-Checkout embutido com cartão, wallets ou PIX na mesma sessão SDK.
+Checkout embutido com cartão e wallets (Apple Pay / Google Pay). **PIX não é suportado** na sessão SDK — use `POST /api/payments/pix` no servidor (módulo 10).
 
 ## CDN e init
 
@@ -529,8 +536,79 @@ const sdk = window.CajuPaySDK.init({ baseUrl: "https://api.cajupay.com.br" });
 Ver módulo 01. Resumo:
 
 - `POST /api/sdk/v1/checkout/sessions` com `X-API-Key` + `X-API-Secret`
-- Defaults: `allow_pix` true, `allow_card` true; com cartão, wallets tendem a true
+- **PIX:** não permitido (`allow_pix: true` → `400 pix_not_supported_on_sdk_checkout`). Use a API PIX server-side.
+- Defaults: `allow_card` true; com cartão, `allow_apple_pay` e `allow_google_pay` tendem a true
 - Se pedir wallet, CajuPay **promove** `allow_card: true` automaticamente (fallback)
+
+Exemplo de body (servidor):
+
+```json
+{
+  "amount_cents": 9900,
+  "currency": "BRL",
+  "description": "Pedido #1",
+  "allow_card": true,
+  "allow_apple_pay": true,
+  "allow_google_pay": true,
+  "locale": "pt-BR"
+}
+```
+
+## Idioma (`locale`)
+
+Controla o idioma do **formulário embutido de cartão**, dos **botões nativos de wallet** (Apple Pay / Google Pay) e dos **rótulos padrão do SDK** (títulos, botão pagar, nomes de método).
+
+| Valor | Comportamento |
+|-------|----------------|
+| Omitido ou `"auto"` | Idioma do navegador do pagador |
+| Tag BCP-47 (`en`, `es`, `pt-BR`, `fr-CA`, …) | Fixa o idioma (servidor trunca a 16 caracteres) |
+
+### Onde definir
+
+| Camada | Campo |
+|--------|--------|
+| Servidor | `locale` no body de `POST /api/sdk/v1/checkout/sessions` (persistido no link de pagamento) |
+| Browser | `locale` e `labels` no `mountCheckout` |
+
+### Prioridade
+
+1. Se `mountCheckout` define `locale` (inclusive `"auto"`), esse valor **prevalece** sobre o da sessão.
+2. Se `mountCheckout` **omite** `locale`, o SDK usa `locale` retornado por `GET /api/sdk/public/checkout/sessions/{token}`.
+3. Com `"auto"` ou omitido em ambos, usa o idioma do navegador.
+
+Para o embed **herdar** o idioma definido só no servidor, **não** passe `locale` no `mountCheckout`.
+
+### Resposta da sessão
+
+`GET /api/sdk/v1/checkout/sessions/{id}` e `GET /api/sdk/public/checkout/sessions/{token}` incluem `"locale": "pt-BR"` (ou `"auto"`).
+
+### Checkout hospedado
+
+Em `hosted_checkout_url`, a página CajuPay aplica o `locale` gravado na sessão/link — não é necessário remontar o SDK no site do parceiro.
+
+### Rótulos customizados (`labels`)
+
+Sobrescreva textos do SDK no `mountCheckout` (não altera placeholders do iframe de cartão):
+
+```javascript
+labels: {
+  payButton: "Pagar agora",
+  methodApplePay: "Apple Pay",
+  methodGooglePay: "Google Pay",
+  walletUnavailableFallback: "Use cartão neste dispositivo.",
+}
+```
+
+Chaves suportadas: `checkoutSecureTitle`, `payButton`, `cardSectionTitle`, `payerName`, `payerEmail`, `payerDocument`, `paymentConfirmed`, `paymentInitialized`, `walletConfirmPrefix`, `walletUnavailableFallback`, `methodCard`, `methodPix`, `methodBoleto`, `methodApplePay`, `methodGooglePay`, `paymentTotalLabel`.
+
+### Idiomas suportados
+
+| Camada | Tags principais |
+|--------|-----------------|
+| Rótulos do SDK | `en`, `pt-BR`, `es`, `fr`, `de`, `it`, `ja`, `ko`, `zh` (+ prefixos BCP-47 mapeados, ex. `es-MX` → `es`) |
+| Formulário embutido de cartão | Conjunto maior do processador: `auto`, `en`, `en-GB`, `pt`, `pt-BR`, `es`, `es-419`, `fr`, `de`, `it`, `ja`, `ko`, `zh`, `zh-HK`, `zh-TW`, `nl`, `pl`, `ru`, … (tags inválidas caem em `en`) |
+
+Wallets **não** têm locale separado — usam o mesmo locale do embed.
 
 ## mountCheckout
 
@@ -539,6 +617,7 @@ const controller = await sdk.mountCheckout("#cajupay-method", {
   token: sessionToken,              // público — veio do seu backend
   defaultMethod: "card",            // OBRIGATÓRIO se o host escolhe o método
   embeddedOnly: true,
+  locale: "auto",                   // ou "en", "es", "pt-BR" — idioma do iframe de cartão + rótulos do SDK
   preparePaymentUIOnMount: true,    // default efetivo: priming após mount
   initialPayer: {                   // opcional — só pré-preenchimento visual
     name: "",
@@ -569,8 +648,6 @@ const controller = await sdk.mountCheckout("#cajupay-method", {
 |--------|--------------------------|----------------|
 | `card` | Automática com `preparePaymentUIOnMount` — mostra inputs | Botão **Pagar do host** após `setPayer` |
 | `apple_pay` / `google_pay` | Mostra botão nativo | Pagador clica no botão **nativo** (não no host) |
-| `pix` (se na sessão) | N/A | Uma única `confirm()` no Pagar do host |
-
 Tratar como **sucesso**, não erro:
 
 - Mensagem/phase com `awaiting`, `card_details`, `awaiting_card_details`
@@ -595,7 +672,7 @@ Chamar:
 
 | Método | Rota |
 |--------|------|
-| GET | `/api/sdk/public/checkout/sessions/{token}` → `methods_available` |
+| GET | `/api/sdk/public/checkout/sessions/{token}` → `methods_available`, `locale` |
 | POST | `/api/sdk/public/checkout/sessions/{token}/confirm` + `Idempotency-Key` |
 
 Body do confirm:
@@ -612,8 +689,7 @@ Body do confirm:
 Resposta `next_action.type`:
 
 - `embedded_form` — cartão/wallet (formulário embed do SDK)
-- `pix` — QR/copia e cola
-- `redirect` — hosted checkout
+- `redirect` — hosted checkout (cartão/wallets; sem PIX)
 
 ## defaultMethod vs methods_available
 
@@ -641,6 +717,7 @@ Valide `methods_available` via `GET .../sessions/{token}` **antes** do mount.
 - [ ] `embeddedOnly: true`
 - [ ] `defaultMethod` sincronizado com UI
 - [ ] `setPayer` antes de confirms relevantes
+- [ ] `locale` na sessão e/ou `mountCheckout` alinhado ao idioma do checkout
 
 ---
 
@@ -686,6 +763,7 @@ async function startCardCheckout(sessionToken) {
     token: sessionToken,
     embeddedOnly: true,
     defaultMethod: "card",
+    locale: "auto",
     preparePaymentUIOnMount: true,
     onStatus: (ev) => {
       if (ev.phase === "awaiting_card_details") {
@@ -718,6 +796,8 @@ document.getElementById("btn-pay-card").addEventListener("click", async () => {
 
 ## Sessão — body servidor
 
+Para vendas internacionais, envie `currency` ISO 4217 (`USD`, `EUR`, …) na moeda de vitrine. Lojistas BR: a cobrança é liquidada em BRL (conversão automática via PTAX BCB); API/webhook retornam vitrine + `settlement_*`. Ver módulo `20-multi-currency`. Conversão no checkout hospedado (roadmap) exige fluxo diferente — hoje o formulário embutido usa conversão no servidor.
+
 ```json
 {
   "amount_cents": 9900,
@@ -726,11 +806,41 @@ document.getElementById("btn-pay-card").addEventListener("click", async () => {
   "allow_card": true,
   "allow_apple_pay": false,
   "allow_google_pay": false,
-  "allow_pix": false
+  "allow_pix": false,
+  "locale": "pt-BR"
 }
 ```
 
+`locale` define o idioma dos campos do formulário embutido de cartão (placeholders e validações do processador). Use `"auto"` para seguir o navegador ou omita `locale` no `mountCheckout` para herdar o valor da sessão (módulo 05).
+
 Para esconder wallets mas manter fallback interno da API, basta `allow_apple_pay: false` e `allow_google_pay: false` — `allow_card` permanece true.
+
+## Moedas aceitas (vitrine)
+
+Cartão, Apple Pay, Google Pay e boleto usam o campo `currency` (ISO 4217) na sessão ou cobrança.
+
+**Principais:** `BRL`, `USD`, `EUR`.
+
+### Lojista com conta no Brasil
+
+Vitrine: qualquer código **ISO 4217** válido (ex.: `MZN`, `USD`, `EUR`).
+
+Liquidação no processador de pagamentos (caminho preferencial):
+
+1. **PTAX BCB → BRL** quando a cotação existir (`USD`, `EUR`, `GBP`, `JPY`, `AUD`, `CAD`, `CHF`, `DKK`, `NOK`, `SEK`, etc.).
+2. **Fallback automático → USD** (cotação externa) quando o PTAX não tiver a moeda (ex.: `MZN`). O comprador pode ser cobrado em **USD** (`charge_currency: usd`).
+3. Se a conta conectada **recusar** cobrança em USD, a plataforma converte **USD → BRL** via PTAX e recria a cobrança em **BRL**.
+
+Metadados da cobrança: `fx_fallback_via` (`usd` ou `usd_then_brl`), `fx_presentment_to_usd_rate`, `fx_rate` composto.
+
+### Lojista fora do Brasil
+
+A vitrine coincide com a moeda de liquidação na conta conectada (ex.: `MZN` direto no processador, sem conversão PTAX). Valide quais moedas a conta conectada aceita.
+
+### Regras gerais
+
+- Envie `currency` em **maiúsculas** no body (`"USD"`). Respostas podem vir em minúsculas (`"usd"`).
+- **PIX** permanece **somente BRL** — ver módulo `10-pix` e `20-multi-currency`.
 
 ## HTTPS em desenvolvimento
 
@@ -840,9 +950,12 @@ await controller.confirm(); // priming — botão Apple Pay aparece
   "description": "Produto",
   "allow_card": true,
   "allow_apple_pay": true,
-  "allow_google_pay": false
+  "allow_google_pay": false,
+  "locale": "en"
 }
 ```
+
+O botão nativo Apple Pay e mensagens do SDK no slot seguem o mesmo `locale` do embed (cartão + wallet compartilham configuração — módulo 05). Não existe locale separado para wallet.
 
 Wallets implicam `allow_card: true` na CajuPay mesmo que você envie só Apple Pay — necessário para fallback se a wallet falhar.
 
@@ -969,9 +1082,12 @@ Obtenha `publishableKey` e `connectedAccount` após primeiro `confirm` ou de `ne
   "amount_cents": 9900,
   "allow_card": true,
   "allow_google_pay": true,
-  "allow_apple_pay": false
+  "allow_apple_pay": false,
+  "locale": "auto"
 }
 ```
+
+O sheet/botão nativo Google Pay usa o mesmo `locale` do embed que cartão e Apple Pay (módulo 05).
 
 ## Validação methods_available
 
@@ -1138,7 +1254,7 @@ Cobrança PIX em ERP, e-commerce backend, checkout próprio sem iframe de cartã
 | SDK embed | Cartão, Apple Pay, Google Pay |
 | **API REST** | **PIX** |
 
-Não misture PIX no mesmo fluxo de `mountCheckout` salvo sessão SDK com `allow_pix: true` e `method: "pix"` no confirm — o padrão recomendado para checkout simples é API direta.
+**PIX não é aceito** em `POST /api/sdk/v1/checkout/sessions` nem no `confirm` de sessão SDK (`400 pix_not_supported_on_sdk_checkout`). Sessões antigas com PIX no link hospedado deixam de exibir o método após deploy + migração.
 
 ## Criar cobrança PIX
 
@@ -1186,9 +1302,16 @@ Resposta (200):
 2. POST seu-backend/checkout → seu serviço chama POST /api/payments/pix
 3. Exibir QR / copia e cola (pix_copy_paste, pix_qr_code)
 4. order.gateway_id = payment_id (UUID CajuPay)
-5. Polling status OU webhook pix.payment.* (módulo 12)
-6. Ao paid → liberar produto
-```
+5. Webhook `pix.payment.*` (módulo 12) **+** reconciliação em background (módulo 21)
+6. Ao paid → liberar produto (idempotente)
+
+## Reconciliação em background (obrigatório)
+
+O webhook outbound é enviado **uma vez** e pode falhar. Polling **só na tela do QR** não cobre o caso em que o comprador paga e fecha a aba.
+
+Implemente um **job no servidor** (cron/worker) que consulta `GET /api/payments` a cada **60–120 s** por **6–12 h**, localiza o `payment_id` salvo no pedido e, se `status === "paid"`, executa o **mesmo pipeline** do webhook.
+
+Detalhes, pseudocódigo e prompt para IA: [21-dev-tips-pix-reconciliation-security.md](21-dev-tips-pix-reconciliation-security.md).
 
 ## Exemplo Node
 
@@ -1239,7 +1362,8 @@ Recebimento PIX **não** exige KYC aprovado. Saques sim (módulo 14).
 - [ ] PIX criado no servidor com API Keys
 - [ ] `Idempotency-Key` por pedido
 - [ ] `payment_id` salvo no pedido interno
-- [ ] Webhook ou polling para `paid` (módulo 12)
+- [ ] Webhook `pix.payment.*` (módulo 12)
+- [ ] Job de reconciliação em background — `GET /api/payments` (módulo 21)
 - [ ] Se houver reembolso/MED: módulos 18, 19 e eventos webhook PIX
 
 ---
@@ -1351,6 +1475,29 @@ if (!hash_equals(strtolower($computed), strtolower($signatureHex))) {
     return 401;
 }
 ```
+
+## Payload `checkout.payment.paid` (multi-moeda)
+
+`amount_cents`, `fee_cents`, `net_cents` e `currency` refletem o **pagamento confirmado** na moeda da cobrança (ex.: venda em USD → `"currency": "usd"`). Não há conversão automática para BRL no webhook.
+
+```json
+{
+  "type": "checkout.payment.paid",
+  "data": {
+    "object": {
+      "gateway": "cajupay",
+      "checkout_session_id": "uuid-sessao",
+      "cajupay_charge_id": "uuid-cobranca",
+      "amount_cents": 1999,
+      "fee_cents": 120,
+      "net_cents": 1879,
+      "currency": "usd"
+    }
+  }
+}
+```
+
+Ver módulo `20-multi-currency` para regras PIX vs Caju Global.
 
 ## Encontrar o pedido (ordem)
 
@@ -1757,10 +1904,28 @@ Endpoint **seu** (exemplo): `GET /checkout/order-status?token={polling_token}`
 
 UI: `Aguardando confirmação do pagamento…`
 
+## PIX — reconciliação em background (servidor)
+
+Para cobranças `POST /api/payments/pix` (sem sessão SDK):
+
+| Aspecto | Recomendação |
+|---------|----------------|
+| Onde roda | **Worker/cron no backend** do integrador — não só JavaScript na página do QR |
+| API | `GET https://api.cajupay.com.br/api/payments?limit=...` com `X-API-Key` + `X-API-Secret` |
+| Correlacionar | `payment_id` (UUID da resposta do POST) salvo em `gateway_id` / pedido interno |
+| Intervalo | **60–120 s** por pedido `pending` |
+| Janela | **6–12 h** após criar a cobrança; parar em `paid`, `cancelled` ou expirado |
+| Processamento | Mesmo handler idempotente do webhook `pix.payment.paid` |
+
+**Polling na UI (~2–3 s)** na tela do QR é opcional (feedback imediato). **Reconciliação (~1–2 min)** no servidor é obrigatória em produção — cobre webhook perdido e comprador que não volta à página.
+
+Ver módulo [21-dev-tips-pix-reconciliation-security.md](21-dev-tips-pix-reconciliation-security.md).
+
 ## Consultas CajuPay
 
 | Uso | Rota |
 |-----|------|
+| **PIX — listar/status (reconciliação)** | `GET /api/payments?limit=...` |
 | Sessão (servidor) | `GET /api/sdk/v1/checkout/sessions/{id}` |
 | Sessão (público) | `GET /api/sdk/public/checkout/sessions/{token}` |
 | PIX status (sessão link) | `GET /api/sdk/public/checkout/sessions/{token}/payments/{payment_id}` |
@@ -1785,6 +1950,7 @@ UI: `Aguardando confirmação do pagamento…`
 - [ ] Metadata com `cajupay_session_token`
 - [ ] Polling com idempotência no processamento
 - [ ] Atualizar `gateway_id` quando `charge_id` chegar
+- [ ] **PIX:** job servidor com `GET /api/payments` (não só poll na tela do QR)
 
 ---
 
@@ -1817,6 +1983,7 @@ Revise o código gerado contra esta lista antes de considerar a integração com
 | 14 | Checkout cartão em HTTP local | Túnel HTTPS |
 | 15 | Slugs `applepay` / `googlepay` | Usar underscore |
 | 16 | Re-serializar JSON para validar HMAC webhook | Raw body bytes |
+| 17 | Reconciliar PIX só na tela do QR / só webhook | Job servidor: `GET /api/payments` a cada 1–2 min (módulo 21) |
 
 ## Checklist de produção — SDK embed
 
@@ -1848,7 +2015,9 @@ Revise o código gerado contra esta lista antes de considerar a integração com
 - [ ] `POST /api/payments/pix` no servidor
 - [ ] `Idempotency-Key`
 - [ ] `payment_id` no pedido
-- [ ] Webhook `pix.payment.*` ou polling se necessário
+- [ ] Webhook `pix.payment.*` cadastrado e validado (HMAC)
+- [ ] Job de reconciliação em background (`GET /api/payments`, 60–120 s, janela 6–12 h)
+- [ ] Fulfillment `paid` idempotente (webhook + reconciliação)
 
 ## Validação final para IA
 
@@ -2390,34 +2559,136 @@ async function submitMedDefense(disputeId, text, filePaths) {
 
 ---
 
-# Multi-moeda (Caju Global)
+<!-- module: 21-dev-tips-pix-reconciliation-security -->
+
+
+# Dicas do dev — reconciliação PIX e segurança (IA)
 
 ## INSTRUÇÕES PARA O MODELO
 
-1. **PIX** permanece apenas em **BRL**.
-2. Integrador envia `currency` + `amount_cents` na **moeda de vitrine** (USD, EUR, …).
-3. Lojistas BR (Caju Global): cobrança liquidada em **BRL** (conversão PTAX BCB automática).
-4. Webhook/respostas: `amount_cents`/`currency` = vitrine; `settlement_*` + `fx_rate` = BRL cobrado.
-5. Confirm embedded: `charge_amount_cents`/`charge_currency` no `next_action` para wallets.
-6. Conversão automática no checkout hospedado (roadmap) não aplica ao formulário embutido atual.
+1. **Webhook PIX não é garantia única** — implemente reconciliação em background no servidor do integrador.
+2. **Não reconciliar só na tela do QR** — se o comprador sair da página, o pedido pode ficar `pending` para sempre.
+3. Use **`GET /api/payments`** no servidor com o `payment_id` salvo no pedido interno.
+4. Ao gerar código com IA, inclua job/cron + idempotência no handler de `paid`.
 
-## Webhook `checkout.payment.paid` (USD vitrine)
+## PIX — como funciona a notificação
 
-```json
-{
-  "type": "checkout.payment.paid",
-  "data": {
-    "object": {
-      "amount_cents": 1999,
-      "currency": "usd",
-      "settlement_amount_cents": 11000,
-      "settlement_currency": "brl",
-      "fx_rate": "5.502500",
-      "fee_cents": 120,
-      "net_cents": 1879
+Quando o comprador paga um PIX na CajuPay:
+
+1. A CajuPay processa o pagamento no PSP/adquirente.
+2. A CajuPay envia **uma notificação** (webhook outbound) para o sistema do integrador — **uma vez por evento**.
+3. O integrador deve marcar o pedido interno como pago e liberar o produto/serviço.
+
+**Problema comum:** o webhook pode **não chegar** ou **não ser processado** (timeout, deploy, fila cheia, bug, URL errada, retry esgotado). Isso é normal em integrações de pagamento.
+
+**Outro problema comum:** o integrador só faz **polling na página do QR** (JavaScript na tela esperando o webhook). Se o cliente paga e **não volta** para essa tela, o pedido continua `pending` no sistema do integrador — mesmo já estando `paid` na CajuPay.
+
+## Reconciliação em background (obrigatório em produção)
+
+Além do webhook, implemente um **job de reconciliação** no **backend** do integrador (worker, cron, fila — **não** depender só do browser com o usuário na tela).
+
+### Regras recomendadas
+
+| Parâmetro | Valor sugerido |
+|-----------|----------------|
+| Intervalo | **60–120 segundos** (1–2 minutos) |
+| Janela | **6–12 horas** após criar a cobrança PIX |
+| Parar quando | `status` = `paid`, `cancelled` ou pedido expirado no seu sistema |
+| Onde roda | **Servidor** (cron/worker), não só na UI do checkout |
+
+### API de consulta
+
+```http
+GET https://api.cajupay.com.br/api/payments?limit=100
+X-API-Key: <public_key>
+X-API-Secret: <secret_key>
+```
+
+- Escopo: `payments.write` (igual à criação PIX).
+- Resposta: **array** de cobranças recentes da conta.
+- Localize o item pelo **`payment_id`** (UUID retornado no `POST /api/payments/pix`) que você salvou em `order.gateway_id` / `cajupay_payment_id`.
+- Compare o campo **`status`**: quando for `paid`, execute o **mesmo pipeline** do webhook (liberar produto, e-mail, etc.).
+
+**Idempotência:** o handler de “marcar pedido pago” deve ser seguro se webhook e reconciliação rodarem os dois — use lock, `UPDATE ... WHERE status = 'pending'`, ou tabela de eventos processados.
+
+### Pseudocódigo (Node / worker)
+
+```javascript
+// Cron a cada 2 minutos — EXEMPLO no servidor do integrador
+async function reconcilePendingPixOrders() {
+  const pending = await db.orders.findPendingPixOlderThan(2 * 60 * 1000); // min 2 min
+  const cutoff = Date.now() - 12 * 60 * 60 * 1000; // 12h
+
+  for (const order of pending) {
+    if (order.createdAt < cutoff) continue;
+    const paymentId = order.cajupay_payment_id;
+    if (!paymentId) continue;
+
+    const list = await cajupayFetch("/api/payments?limit=50");
+    const row = list.find((p) => p.payment_id === paymentId);
+    if (!row) continue;
+
+    if (row.status === "paid") {
+      await fulfillOrderIdempotent(order.id, { source: "reconcile_poll" });
     }
   }
 }
 ```
 
-Erros: `invalid_currency`, `pix_only_requires_brl`, `fx_conversion_failed`.
+### Polling na UI vs reconciliação
+
+| Tipo | Onde | Intervalo | Objetivo |
+|------|------|-----------|----------|
+| **UI** (opcional) | Browser na tela do QR | ~2–3 s | Feedback imediato se usuário ainda está na página |
+| **Reconciliação** (obrigatório) | Servidor / worker | 60–120 s | Garantir `paid` mesmo sem webhook ou sem usuário na tela |
+
+## Prompt copiável para IA
+
+Cole no ChatGPT, Claude ou Cursor ao integrar PIX:
+
+```text
+Integro a CajuPay com PIX via POST /api/payments/pix no servidor.
+
+Implemente reconciliação em background no MEU backend (não só na tela do QR):
+- Quando crio a cobrança, salvo payment_id no pedido interno.
+- Webhook da CajuPay é o canal principal, mas pode falhar — não dependo só dele.
+- Um job/cron no servidor consulta GET https://api.cajupay.com.br/api/payments a cada 1–2 minutos.
+- Para pedidos PIX ainda pending, busco o payment_id na lista e, se status === "paid", marco o pedido pago com o mesmo fluxo idempotente do webhook.
+- Paro de consultar cada pedido após 6–12 horas ou status terminal.
+- Não exponho X-API-Secret no frontend.
+- Use apenas rotas documentadas da CajuPay; não invente endpoints.
+```
+
+## Segurança — apps gerados por IA
+
+Checklist quando o código é gerado por LLM:
+
+| Risco | Mitigação |
+|-------|-----------|
+| `X-API-Secret` no React/Vue/mobile | Secret **só no servidor**; browser chama seu backend |
+| XSS em nome/e-mail do pagador | Não usar `innerHTML`; preferir `textContent` / React escape |
+| XSS no copia-e-cola PIX | Tratar `pix_copy_paste` como texto, não HTML |
+| Webhook forjado | Validar HMAC no **raw body** + `X-CajuPay-Timestamp` (módulo 11) |
+| Duplo crédito (webhook + poll) | Handler `paid` idempotente |
+| Logs com segredo ou PIX completo | Mascarar em produção |
+| POST PIX sem idempotência | Header `Idempotency-Key` por pedido |
+
+Ver também: [03-security-idempotency-errors.md](03-security-idempotency-errors.md), [12-webhooks-pix-med.md](12-webhooks-pix-med.md).
+
+## Erros clássicos
+
+| Sintoma | Causa provável | Correção |
+|---------|----------------|----------|
+| Pago na CajuPay, pending no ERP | Webhook perdido + sem reconciliação | Job `GET /api/payments` |
+| Só atualiza se usuário fica na tela | Poll só no frontend | Worker no servidor |
+| Pedido pago duas vezes | Webhook + poll sem idempotência | Um pipeline `fulfill` idempotente |
+| Secret vazou no GitHub | IA colocou env no client | Mover para backend |
+
+## Checklist
+
+- [ ] `payment_id` salvo ao criar PIX
+- [ ] Webhook outbound cadastrado e validado (HMAC)
+- [ ] Job de reconciliação no servidor (60–120 s, janela 6–12 h)
+- [ ] `GET /api/payments` com API Keys no servidor
+- [ ] Fulfillment idempotente (`paid`)
+- [ ] Secret nunca no frontend

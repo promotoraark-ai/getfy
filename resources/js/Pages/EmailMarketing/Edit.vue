@@ -78,7 +78,7 @@ function confirmSend() {
         </div>
 
         <form
-            class="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-800/50"
+            class="panel-card-lg space-y-6"
             @submit.prevent="form.put(`/email-marketing/${campaign.id}`)"
         >
             <div>

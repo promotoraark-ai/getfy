@@ -88,6 +88,10 @@ class TeamAccessService
             'api_pagamentos.view' => true,
             'configuracoes.view' => true,
             'equipe.manage' => true,
+            'afiliados.manage' => true,
+            'coproducao.manage' => true,
+            'financeiro.view' => true,
+            'financeiro.manage' => true,
         ];
     }
 }

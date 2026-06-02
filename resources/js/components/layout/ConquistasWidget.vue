@@ -49,17 +49,17 @@ const panelNavPrefetch = ['hover', 'click'];
         v-if="progress"
         href="/conquistas"
         :prefetch="panelNavPrefetch"
-        class="group flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
+        class="group flex shrink-0 items-center gap-3 rounded-full px-2 py-1.5 transition-opacity hover:opacity-90"
         :class="{
-            'flex-col items-stretch gap-2': props.variant === 'sidebar',
-            'w-full rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-700': props.variant === 'dashboard',
+            'flex-col items-stretch gap-2 !rounded-2xl !px-4 !py-3': props.variant === 'sidebar',
+            'w-full !rounded-2xl px-4 py-3': props.variant === 'dashboard',
         }"
         title="Conquistas"
     >
         <div
-            class="flex shrink-0 items-center justify-center overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800"
+            class="flex shrink-0 items-center justify-center overflow-hidden rounded-full"
             :class="[
-                props.variant === 'sidebar' ? 'h-12 w-12' : 'h-10 w-10',
+                props.variant === 'sidebar' ? 'h-12 w-12' : 'h-8 w-8',
                 { 'opacity-60 grayscale': isLocked },
             ]"
         >
@@ -90,7 +90,7 @@ const panelNavPrefetch = ['hover', 'click'];
             <div
                 class="w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700"
                 :class="[
-                    props.variant === 'sidebar' || props.variant === 'dashboard' ? 'h-2.5' : 'h-2',
+                    props.variant === 'sidebar' || props.variant === 'dashboard' ? 'h-2.5' : 'h-1.5',
                 ]"
             >
                 <div

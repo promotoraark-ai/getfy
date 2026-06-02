@@ -32,6 +32,7 @@ const ATTRIBUTION_PARAM_KEYS = [
     'msclkid',
     'src',
     'sck',
+    'ref',
 ];
 
 function utmStorageKey() {
@@ -95,8 +96,17 @@ function getUtmPayload() {
     return out;
 }
 
+function getAffiliateRefPayload() {
+    const merged = mergeStoredUtms();
+    const ref = merged.ref || props.affiliateRef || '';
+    if (ref && String(ref).trim() !== '') {
+        return { affiliate_ref: String(ref).trim().slice(0, 32) };
+    }
+    return {};
+}
+
 function appendUtms(payload) {
-    Object.assign(payload, getUtmPayload(), readFbpFbcFromCookies());
+    Object.assign(payload, getUtmPayload(), readFbpFbcFromCookies(), getAffiliateRefPayload());
     return payload;
 }
 
@@ -224,6 +234,7 @@ const props = defineProps({
     productOfferId: { type: Number, default: null },
     subscriptionPlanId: { type: Number, default: null },
     checkoutSessionToken: { type: String, default: '' },
+    affiliateRef: { type: String, default: '' },
     orderBumps: { type: Array, default: () => [] },
     orderBumpIds: { type: Array, default: () => [] },
     primaryColor: { type: String, default: '#7427F1' },
@@ -235,6 +246,8 @@ const props = defineProps({
     prefillCoupon: { type: String, default: '' },
     t: { type: Function, default: (k) => k },
     displayCurrency: { type: String, default: 'BRL' },
+    /** Idioma ativo no checkout (pt_BR, en, es) — repassado à sessão CajuPay SDK. */
+    checkoutLocale: { type: String, default: 'pt_BR' },
     /** Código do país (ISO) detectado por geo para pré-selecionar o DDI do telefone */
     suggestedCountryCode: { type: String, default: null },
     /** Chave do checkout (slug) para flags manual/geo no localStorage — deve bater com Show.vue */
@@ -1129,6 +1142,7 @@ function buildCajuPaySessionPayload() {
     if (props.subscriptionPlanId) payload.subscription_plan_id = props.subscriptionPlanId;
     if (props.checkoutSessionToken) payload.checkout_session_token = props.checkoutSessionToken;
     if (props.displayCurrency) payload.display_currency = props.displayCurrency;
+    if (props.checkoutLocale) payload.checkout_locale = props.checkoutLocale;
     const country = props.suggestedCountryCode
         ? String(props.suggestedCountryCode).toUpperCase().trim().slice(0, 2)
         : '';
@@ -1337,6 +1351,21 @@ watch(
         scheduleEnsureCajuPaySession();
     },
     { deep: true }
+);
+
+watch(
+    () => props.checkoutLocale,
+    () => {
+        if (!isCajuPaySdkFlow.value) return;
+        if (cajupaySessionToken.value) {
+            cajupaySessionToken.value = '';
+            cajupayPollingToken.value = '';
+            cajupayMethodsAvailable.value = [];
+            cajupayOrderMaterialized.value = false;
+            stopCajuPayPolling();
+        }
+        scheduleEnsureCajuPaySession();
+    }
 );
 
 const cardNumberInput = ref(null);

@@ -23,12 +23,14 @@ onMounted(() => {
     <div
         role="group"
         aria-label="Tema"
-        class="flex rounded-full bg-zinc-200/70 p-0.5 dark:bg-zinc-600/50"
+        class="flex rounded-full border border-zinc-200 bg-zinc-100 p-0.5 dark:border-zinc-700 dark:bg-zinc-800/80"
     >
         <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-600 transition-all dark:text-zinc-400"
-            :class="theme === 'light' ? 'bg-white text-amber-600 shadow-sm dark:shadow-none' : 'hover:text-zinc-900 dark:hover:text-zinc-200'"
+            class="flex h-8 w-8 items-center justify-center rounded-full transition-colors"
+            :class="theme === 'light'
+                ? 'bg-white text-zinc-900 dark:bg-zinc-600 dark:text-white'
+                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
             aria-label="Tema claro"
             @click="setTheme('light')"
         >
@@ -43,8 +45,10 @@ onMounted(() => {
         </button>
         <button
             type="button"
-            class="flex h-8 w-8 items-center justify-center rounded-full text-zinc-600 transition-all dark:text-zinc-400"
-            :class="theme === 'dark' ? 'bg-zinc-700 text-zinc-100 shadow-sm' : 'hover:text-zinc-900 dark:hover:text-zinc-200'"
+            class="flex h-8 w-8 items-center justify-center rounded-full transition-colors"
+            :class="theme === 'dark'
+                ? 'bg-white text-zinc-900 dark:bg-zinc-600 dark:text-white'
+                : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'"
             aria-label="Tema escuro"
             @click="setTheme('dark')"
         >

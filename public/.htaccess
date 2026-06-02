@@ -16,6 +16,9 @@
     # Storage: sempre pelo Laravel (sem depender de symlink public/storage)
     RewriteRule ^storage/ index.php [L]
 
+    # Favicon da marca: versão otimizada 32px via Laravel (evita PNG grande em branco na aba)
+    RewriteRule ^brand/favicon\.png$ index.php [L]
+
     # Raiz: redireciona para /login (quando document root é public/)
     RewriteRule ^/?$ /login [R=302,L]
 

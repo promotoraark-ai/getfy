@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Support\BrandFavicon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -20,10 +21,10 @@ Route::any('/install/{path}', [\App\Http\Controllers\InstallServeController::cla
 Route::get('/docker-setup', [\App\Http\Controllers\DockerSetupController::class, 'show'])->name('docker-setup');
 Route::post('/docker-setup', [\App\Http\Controllers\DockerSetupController::class, 'store'])->middleware('throttle:10,1');
 
-// Favicon: evita 404 no console quando o navegador solicita /favicon.ico
-Route::get('/favicon.ico', function () {
-    return redirect('https://cdn.getfy.cloud/collapsed-logo.png', 302);
-});
+// Favicon da plataforma (sempre via Laravel — funciona mesmo se o docroot não for public/)
+Route::get('/brand/favicon.png', fn () => BrandFavicon::serve())->name('brand.favicon');
+
+Route::get('/favicon.ico', fn () => BrandFavicon::serve());
 
 // PWA Painel: manifest e service worker
 Route::get('/manifest.json', [\App\Http\Controllers\PanelPwaController::class, 'manifest'])->name('panel.pwa.manifest');
@@ -67,6 +68,10 @@ Route::get('/', function (\Illuminate\Http\Request $request) {
     if (auth()->check()) {
         $user = auth()->user();
         if ($user->canAccessPanel()) {
+            if ($user->isPartner()) {
+                return redirect('/parceiro');
+            }
+
             return redirect('/dashboard');
         }
 
@@ -175,6 +180,28 @@ Route::post('/checkout/downsell/decline', [\App\Http\Controllers\UpsellControlle
 Route::get('/conquistas/{slug}/share', [\App\Http\Controllers\ConquistasController::class, 'share'])
     ->name('conquistas.share')
     ->where('slug', '[a-z0-9-]+');
+
+Route::get('/convite/co-producao/{token}', [\App\Http\Controllers\CoproducerInviteController::class, 'show'])
+    ->name('convite.coproducao.show')
+    ->where('token', '[a-zA-Z0-9]+');
+Route::get('/convite/co-producao/{token}/cadastro', [\App\Http\Controllers\CoproducerInviteController::class, 'cadastro'])
+    ->name('convite.coproducao.cadastro')
+    ->where('token', '[a-zA-Z0-9]+');
+Route::post('/convite/co-producao/{token}', [\App\Http\Controllers\CoproducerInviteController::class, 'accept'])
+    ->name('convite.coproducao.accept')
+    ->where('token', '[a-zA-Z0-9]+')
+    ->middleware('throttle:10,1');
+
+Route::get('/afiliar/{slug}', [\App\Http\Controllers\AffiliateProgramPublicController::class, 'show'])
+    ->name('afiliar.show')
+    ->where('slug', '[a-z0-9\-]+');
+Route::get('/afiliar/{slug}/cadastro', [\App\Http\Controllers\AffiliateProgramPublicController::class, 'cadastro'])
+    ->name('afiliar.cadastro')
+    ->where('slug', '[a-z0-9\-]+');
+Route::post('/afiliar/{slug}/cadastro', [\App\Http\Controllers\AffiliateProgramPublicController::class, 'register'])
+    ->name('afiliar.register')
+    ->where('slug', '[a-z0-9\-]+')
+    ->middleware('throttle:10,1');
 
 Route::middleware('guest')->group(function () {
     Route::get('/criar-admin', [\App\Http\Controllers\CreateFirstAdminController::class, 'show'])->name('criar-admin');
@@ -305,6 +332,29 @@ Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'audi
             ->name('reembolsos.reject');
     });
 
+    Route::middleware('team.permission:afiliados.manage')->group(function () {
+        Route::get('/afiliados', [\App\Http\Controllers\AffiliatesHubController::class, 'index'])->name('afiliados.index');
+    });
+
+    Route::middleware('team.permission:financeiro.view')->group(function () {
+        Route::get('/financeiro', [\App\Http\Controllers\FinanceiroController::class, 'index'])->name('financeiro.index');
+    });
+
+    Route::middleware('team.permission:financeiro.manage')->group(function () {
+        Route::post('/financeiro/pix', [\App\Http\Controllers\FinanceiroController::class, 'updatePix'])
+            ->middleware('throttle:payout')
+            ->name('financeiro.pix');
+        Route::post('/financeiro/payout', [\App\Http\Controllers\FinanceiroController::class, 'requestPayout'])
+            ->middleware('throttle:payout')
+            ->name('financeiro.payout');
+        Route::post('/financeiro/saques-parceiros/{payout}/approve', [\App\Http\Controllers\FinanceiroPartnerPayoutsController::class, 'approve'])
+            ->middleware('throttle:payout')
+            ->name('financeiro.partner-payouts.approve');
+        Route::post('/financeiro/saques-parceiros/{payout}/reject', [\App\Http\Controllers\FinanceiroPartnerPayoutsController::class, 'reject'])
+            ->middleware('throttle:payout')
+            ->name('financeiro.partner-payouts.reject');
+    });
+
     Route::middleware('team.permission:vendas.view')->group(function () {
         Route::get('/vendas', [\App\Http\Controllers\VendasController::class, 'index'])->name('vendas.index');
         Route::get('/vendas/export', [\App\Http\Controllers\VendasController::class, 'export'])->name('vendas.export');
@@ -371,6 +421,23 @@ Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'audi
         Route::put('/produtos/alunos/{aluno}', [\App\Http\Controllers\AlunosController::class, 'update'])->name('alunos.update')->where('aluno', '[0-9]+');
         Route::delete('/produtos/alunos/{aluno}', [\App\Http\Controllers\AlunosController::class, 'destroy'])->name('alunos.destroy')->where('aluno', '[0-9]+');
         Route::delete('/produtos/alunos/{aluno}/produtos/{produto}', [\App\Http\Controllers\AlunosController::class, 'removeProduct'])->name('alunos.remove-product')->where('aluno', '[0-9]+');
+
+        Route::get('/produtos/co-produtores', [\App\Http\Controllers\AffiliatesHubController::class, 'coproducersIndex'])->name('produtos.coproducers.index');
+        Route::get('/produtos/afiliados-programas', [\App\Http\Controllers\AffiliatesHubController::class, 'affiliatesProductsIndex'])->name('produtos.affiliates.index');
+
+        Route::get('/produtos/{produto}/coproducers', [\App\Http\Controllers\ProductCoproducerController::class, 'index'])->name('produtos.coproducers.api');
+        Route::patch('/produtos/{produto}/coproduction-settings', [\App\Http\Controllers\ProductCoproducerController::class, 'updateCoproductionSettings'])->name('produtos.coproduction-settings');
+        Route::get('/produtos/{produto}/coproducers/candidates', [\App\Http\Controllers\ProductCoproducerController::class, 'candidates'])->name('produtos.coproducers.candidates');
+        Route::post('/produtos/{produto}/coproducers/assign', [\App\Http\Controllers\ProductCoproducerController::class, 'assign'])->name('produtos.coproducers.assign');
+        Route::patch('/produtos/{produto}/coproducers/{coproducer}', [\App\Http\Controllers\ProductCoproducerController::class, 'update'])->name('produtos.coproducers.update');
+        Route::post('/produtos/{produto}/coproducers/invite', [\App\Http\Controllers\ProductCoproducerController::class, 'invite'])->name('produtos.coproducers.invite');
+        Route::post('/produtos/{produto}/coproducers/{coproducer}/revoke', [\App\Http\Controllers\ProductCoproducerController::class, 'revoke'])->name('produtos.coproducers.revoke');
+        Route::post('/produtos/{produto}/coproducers/{coproducer}/resend', [\App\Http\Controllers\ProductCoproducerController::class, 'resendInvite'])->name('produtos.coproducers.resend');
+
+        Route::get('/produtos/{produto}/affiliate-program', [\App\Http\Controllers\ProductAffiliateProgramController::class, 'show'])->name('produtos.affiliate-program.show');
+        Route::put('/produtos/{produto}/affiliate-program', [\App\Http\Controllers\ProductAffiliateProgramController::class, 'updateProgram'])->name('produtos.affiliate-program.update');
+        Route::put('/produtos/{produto}/affiliates/{affiliate}', [\App\Http\Controllers\ProductAffiliateProgramController::class, 'updateAffiliate'])->name('produtos.affiliates.update');
+        Route::delete('/produtos/{produto}/affiliates/{affiliate}', [\App\Http\Controllers\ProductAffiliateProgramController::class, 'destroyAffiliate'])->name('produtos.affiliates.destroy');
 
         // Member Builder (área de membros do produto)
         Route::get('/produtos/{produto}/member-builder', [\App\Http\Controllers\MemberBuilderController::class, 'index'])->name('member-builder.index');
@@ -446,6 +513,12 @@ Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'audi
     Route::put('/configuracoes/gateways/order', [\App\Http\Controllers\GatewaysController::class, 'updateOrder'])
         ->middleware('team.permission:configuracoes.view')
         ->name('gateways.order');
+    Route::get('/configuracoes/gateways/{slug}/fees', [\App\Http\Controllers\GatewaysController::class, 'fees'])
+        ->middleware('team.permission:configuracoes.view')
+        ->name('gateways.fees');
+    Route::put('/configuracoes/gateways/{slug}/fees', [\App\Http\Controllers\GatewaysController::class, 'updateFees'])
+        ->middleware('team.permission:configuracoes.view')
+        ->name('gateways.fees.update');
     Route::middleware('role:admin|infoprodutor')->group(function () {
         Route::get('/gerenciar-plugins', [\App\Http\Controllers\PluginsController::class, 'index'])->name('plugins.index');
         Route::get('/gerenciar-plugins/store-plugins-list', [\App\Http\Controllers\PluginsController::class, 'storePluginsList'])->name('plugins.store.list');
@@ -514,6 +587,25 @@ Route::middleware(['auth', 'admin.tenant', 'role:admin|infoprodutor|team', 'audi
 
 });
 
+Route::middleware(['auth', 'admin.tenant', 'partner.panel'])->prefix('parceiro')->name('parceiro.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\Partner\PartnerDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/produtos', [\App\Http\Controllers\Partner\PartnerProductsController::class, 'index'])->name('produtos.index');
+    Route::get('/vendas', [\App\Http\Controllers\Partner\PartnerVendasController::class, 'index'])->name('vendas.index');
+    Route::get('/financeiro', [\App\Http\Controllers\Partner\PartnerFinanceiroController::class, 'index'])->name('financeiro.index');
+    Route::post('/financeiro/pix', [\App\Http\Controllers\Partner\PartnerFinanceiroController::class, 'updatePix'])
+        ->middleware('throttle:payout')
+        ->name('financeiro.pix');
+    Route::post('/financeiro/payout', [\App\Http\Controllers\Partner\PartnerFinanceiroController::class, 'requestPayout'])
+        ->middleware('throttle:payout')
+        ->name('financeiro.payout');
+    Route::get('/produtos/{produto}', [\App\Http\Controllers\Partner\PartnerProductController::class, 'show'])
+        ->middleware('partner.product')
+        ->name('produtos.show');
+    Route::put('/produtos/{produto}/pixels', [\App\Http\Controllers\Partner\PartnerProductController::class, 'updatePixels'])
+        ->middleware('partner.product')
+        ->name('produtos.pixels');
+});
+
 Route::middleware(['auth', 'role:aluno'])->group(function () {
     Route::get('/area-membros', [\App\Http\Controllers\MemberAreaController::class, 'index'])->name('member-area.index');
 });
@@ -527,7 +619,12 @@ Route::prefix('m/{slug}')->where(['slug' => '[a-zA-Z0-9\-]{3,64}'])->middleware(
             abort(404);
         }
 
-        return response()->file($path, ['Content-Type' => 'application/javascript']);
+        return response()->file($path, [
+            'Content-Type' => 'application/javascript; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     })->name('member-area-app.sw');
     Route::get('login', [\App\Http\Controllers\MemberAreaLoginController::class, 'showLoginForm'])->name('member-area.login')->middleware('guest');
     Route::post('login', [\App\Http\Controllers\MemberAreaLoginController::class, 'login'])->name('member-area.login.post')->middleware(['guest', 'throttle:5,1']);
@@ -587,7 +684,12 @@ Route::middleware(['web', 'member.area.resolve.by.host'])->group(function () {
             abort(404);
         }
 
-        return response()->file($path, ['Content-Type' => 'application/javascript']);
+        return response()->file($path, [
+            'Content-Type' => 'application/javascript; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma' => 'no-cache',
+            'Expires' => '0',
+        ]);
     })->name('member-area-app.sw.host');
     Route::get('access', [\App\Http\Controllers\MemberAreaLoginController::class, 'magicAccessHost'])->name('member-area.magic-access.host')->middleware('member.area.signed');
     // Login da área de membros por host: não registramos GET/POST /login aqui para não sobrescrever

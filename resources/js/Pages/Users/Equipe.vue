@@ -54,6 +54,8 @@ const permissionDefs = [
     { key: 'integracoes.view', label: 'Integrações' },
     { key: 'email_marketing.view', label: 'E-mail Marketing' },
     { key: 'api_pagamentos.view', label: 'API de Pagamentos' },
+    { key: 'financeiro.view', label: 'Financeiro (ver)' },
+    { key: 'financeiro.manage', label: 'Financeiro (sacar / aprovar parceiros)' },
     { key: 'configuracoes.view', label: 'Configurações' },
     { key: 'equipe.manage', label: 'Gerenciar equipe' },
 ];
@@ -287,7 +289,7 @@ function confirmClearLogs() {
         </div>
 
         <!-- Cargos -->
-        <div v-if="activeTab === 'cargos'" class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 overflow-hidden">
+        <div v-if="activeTab === 'cargos'" class="panel-table">
             <ul class="divide-y divide-zinc-200 dark:divide-zinc-700">
                 <li v-for="r in roles" :key="r.id" class="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -332,7 +334,7 @@ function confirmClearLogs() {
         </div>
 
         <!-- Membros -->
-        <div v-else-if="activeTab === 'membros'" class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 overflow-hidden">
+        <div v-else-if="activeTab === 'membros'" class="panel-table">
             <ul class="divide-y divide-zinc-200 dark:divide-zinc-700">
                 <li v-for="m in members" :key="m.id" class="flex flex-col gap-2 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -380,7 +382,7 @@ function confirmClearLogs() {
         <!-- Logs (admin only) -->
         <div
             v-else
-            class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/80 overflow-hidden"
+            class="panel-table"
         >
             <div class="overflow-auto">
                 <table class="min-w-full text-sm">

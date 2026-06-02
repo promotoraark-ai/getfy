@@ -738,7 +738,7 @@ const selectClass =
                 leave-to-class="opacity-0"
             >
                 <div v-show="activeTab === 'email'" class="space-y-6">
-                    <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <section class="panel-card-lg overflow-hidden">
                         <h2 class="mb-2 text-base font-semibold text-zinc-900 dark:text-white">Provedores de e-mail</h2>
                         <p class="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
                             Escolha o provedor de e-mail para envio de acessos, notificações e recuperação de senha.
@@ -779,7 +779,7 @@ const selectClass =
                 leave-to-class="opacity-0"
             >
                 <div v-show="activeTab === 'storage'" class="space-y-6">
-                    <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <section class="panel-table">
                         <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Storage de arquivos</h2>
                             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -808,7 +808,7 @@ const selectClass =
                                 </div>
                             </div>
 
-                            <div v-if="form.storage_provider !== 'local'" class="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/50 p-5 dark:border-zinc-600 dark:bg-zinc-800/50">
+                            <div v-if="form.storage_provider !== 'local'" class="panel-card-md space-y-4">
                                 <div
                                     v-if="isCloudManagedR2"
                                     class="flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/50 dark:bg-emerald-900/20"
@@ -926,7 +926,7 @@ const selectClass =
                                     </p>
                                 </div>
                             </div>
-                            <div v-else class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50">
+                            <div v-else class="panel-card-sm">
                                 <p class="text-sm text-zinc-600 dark:text-zinc-400">
                                     Os arquivos serão salvos em <code class="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-700">storage/app/public</code> e servidos via <code class="rounded bg-zinc-200 px-1 py-0.5 text-xs dark:bg-zinc-700">/storage</code>.
                                 </p>
@@ -946,7 +946,7 @@ const selectClass =
                 leave-to-class="opacity-0"
             >
                 <div v-show="activeTab === 'traducoes'" class="hidden space-y-6 sm:block">
-                    <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <section class="panel-table">
                         <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Checkout – textos por idioma</h2>
                             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -1024,7 +1024,7 @@ const selectClass =
                 leave-to-class="opacity-0"
             >
                 <div v-show="activeTab === 'moedas'" class="space-y-6">
-                    <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                    <section class="panel-table">
                         <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Moedas disponíveis no checkout</h2>
                             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -1061,7 +1061,7 @@ const selectClass =
                                 <div
                                     v-for="(curr, index) in form.currencies"
                                     :key="index"
-                                    class="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50"
+                                    class="panel-card-sm flex flex-col gap-3"
                                 >
                                     <div class="flex flex-wrap items-end gap-3">
                                         <div class="w-24 shrink-0">
@@ -1213,7 +1213,7 @@ const selectClass =
             leave-to-class="opacity-0"
         >
             <div v-show="activeTab === 'cron'" class="w-full max-w-full space-y-6">
-                <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Cron (agendador)</h2>
                         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -1221,7 +1221,7 @@ const selectClass =
                         </p>
                     </div>
                     <div class="space-y-6 p-6">
-                        <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/40">
+                        <div class="panel-card-sm dark:bg-zinc-900/40">
                             <p class="text-sm font-medium text-zinc-900 dark:text-white">
                                 Aviso importante
                             </p>
@@ -1253,7 +1253,7 @@ const selectClass =
                         </div>
 
                         <div class="grid gap-4 lg:grid-cols-2">
-                            <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <div class="panel-card-md dark:bg-zinc-900/40">
                                 <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Cron por URL</h3>
                                 <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                                     Use em serviços externos (cron-job.org, EasyCron etc.) quando você não tem acesso a SSH/Terminal.
@@ -1281,7 +1281,7 @@ const selectClass =
                                 </p>
                             </div>
 
-                            <div class="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900/40">
+                            <div class="panel-card-md dark:bg-zinc-900/40">
                                 <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Cron no Linux (crontab)</h3>
                                 <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
                                     Se você tem acesso ao servidor, adicione uma linha no <code class="rounded bg-zinc-200 px-1 dark:bg-zinc-700">crontab -e</code>.
@@ -1308,7 +1308,7 @@ const selectClass =
             leave-to-class="opacity-0"
         >
             <div v-show="activeTab === 'update'" class="w-full max-w-full space-y-6">
-                <section class="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-800/50">
+                <section class="panel-table">
                     <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                         <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Versão e atualizações</h2>
                         <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -1352,7 +1352,7 @@ const selectClass =
                                 O painel tentará atualizar baixando um pacote do GitHub e aplicando os arquivos por cima, preservando <code class="rounded bg-amber-100 px-1 dark:bg-amber-900/40">.env</code>, <code class="rounded bg-amber-100 px-1 dark:bg-amber-900/40">storage/</code>, <code class="rounded bg-amber-100 px-1 dark:bg-amber-900/40">database/</code> e <code class="rounded bg-amber-100 px-1 dark:bg-amber-900/40">plugins/</code>.
                             </p>
                         </div>
-                        <div v-if="updateCheckResult" class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50">
+                        <div v-if="updateCheckResult" class="panel-card-sm">
                             <p v-if="updateCheckResult.error" class="text-sm text-amber-600 dark:text-amber-400">{{ updateCheckResult.error }}</p>
                             <p v-else-if="updateCheckResult.available" class="text-sm font-medium text-emerald-600 dark:text-emerald-400">
                                 Nova versão disponível: {{ updateCheckResult.latest }}
@@ -1365,13 +1365,13 @@ const selectClass =
                             </p>
                             <div
                                 v-if="updateCheckResult.changelog_remote"
-                                class="mt-3 rounded-lg border border-zinc-200 bg-white p-3 text-sm text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                                class="mt-3 panel-card-sm text-sm text-zinc-700 dark:text-zinc-300"
                             >
                                 <p class="mb-2 font-medium">O que há de novo na versão {{ updateCheckResult.latest }}</p>
                                 <pre class="whitespace-pre-wrap font-sans">{{ updateCheckResult.changelog_remote }}</pre>
                             </div>
                         </div>
-                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50">
+                        <div class="panel-card-sm">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Integridade</p>
                                 <button
@@ -1393,7 +1393,7 @@ const selectClass =
                                     <p v-else class="text-emerald-700 dark:text-emerald-400">
                                         Nenhuma migration pendente.
                                     </p>
-                                    <div v-if="(integrityResult.pending ?? []).length" class="mt-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+                                    <div v-if="(integrityResult.pending ?? []).length" class="mt-2 panel-card-sm dark:bg-zinc-900/30">
                                         <pre class="whitespace-pre-wrap font-mono text-xs text-zinc-700 dark:text-zinc-300">{{ (integrityResult.pending ?? []).join('\n') }}</pre>
                                         <p v-if="integrityResult.pending_truncated" class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Lista truncada.</p>
                                     </div>
@@ -1403,7 +1403,7 @@ const selectClass =
                                 </template>
                             </div>
                         </div>
-                        <div class="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50">
+                        <div class="panel-card-sm">
                             <div class="flex flex-wrap items-center justify-between gap-3">
                                 <p class="text-sm font-medium text-zinc-900 dark:text-zinc-100">Migrations</p>
                                 <button
@@ -1419,7 +1419,7 @@ const selectClass =
                             <div v-if="migrateResult" class="mt-3 text-sm">
                                 <p v-if="migrateResult.success" class="text-emerald-700 dark:text-emerald-400">{{ migrateResult.message }}</p>
                                 <p v-else class="text-amber-700 dark:text-amber-300">{{ migrateResult.message }}</p>
-                                <div v-if="(migrateResult.output ?? '').trim() !== ''" class="mt-2 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900/30">
+                                <div v-if="(migrateResult.output ?? '').trim() !== ''" class="mt-2 panel-card-sm dark:bg-zinc-900/30">
                                     <pre class="whitespace-pre-wrap font-mono text-xs text-zinc-700 dark:text-zinc-300">{{ migrateResult.output }}</pre>
                                 </div>
                             </div>
