@@ -28,10 +28,10 @@ const RANK_CHIP = [
 </script>
 
 <template>
-    <div class="panel-card-md flex h-full flex-col">
-        <div class="flex items-start justify-between gap-3">
+    <div class="panel-card-md flex h-full min-w-0 max-w-full flex-col overflow-hidden">
+        <div class="flex min-w-0 items-start justify-between gap-3">
             <div>
-                <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+                <h2 class="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <div class="dash-metric-icon-sm">
                         <Link2 class="h-4 w-4" />
                     </div>
@@ -43,42 +43,42 @@ const RANK_CHIP = [
             </div>
         </div>
 
-        <div v-if="summary.items.length" class="mt-4 flex flex-1 flex-col gap-4">
+        <div v-if="summary.items.length" class="mt-4 flex min-w-0 flex-1 flex-col gap-4 overflow-hidden">
             <div
                 v-if="leader"
-                class="relative overflow-hidden rounded-xl border border-zinc-200/60 bg-gradient-to-br from-zinc-50 to-white p-4 dark:border-zinc-700/50 dark:from-zinc-800/80 dark:to-zinc-900/40"
+                class="relative min-w-0 overflow-hidden rounded-xl border border-zinc-200/60 bg-gradient-to-br from-zinc-50 to-white p-4 dark:border-zinc-700/50 dark:from-zinc-800/80 dark:to-zinc-900/40"
             >
                 <div class="pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full bg-[var(--color-primary)]/15 blur-2xl" />
-                <div class="relative flex items-center gap-3">
+                <div class="relative flex min-w-0 items-center gap-2 sm:gap-3">
                     <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--color-primary)]/12 text-[var(--color-primary)]">
                         <Megaphone class="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-semibold text-zinc-900 dark:text-white">
+                        <p class="break-all text-sm font-semibold leading-snug text-zinc-900 dark:text-white sm:truncate">
                             {{ leader.source }} / {{ leader.medium }}
                         </p>
                         <p class="text-xs text-zinc-500">{{ leader.count }} sessões</p>
                     </div>
-                    <p class="text-lg font-bold tabular-nums text-[var(--color-primary)]">{{ leader.percent }}%</p>
+                    <p class="shrink-0 text-base font-bold tabular-nums text-[var(--color-primary)] sm:text-lg">{{ leader.percent }}%</p>
                 </div>
             </div>
 
-            <ul class="space-y-2">
+            <ul class="min-w-0 space-y-2 overflow-hidden">
                 <li
                     v-for="src in summary.items"
                     :key="`${src.source}-${src.medium}`"
-                    class="rounded-xl px-1 py-1 transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30"
+                    class="min-w-0 rounded-xl px-1 py-1 transition-colors hover:bg-zinc-50/80 dark:hover:bg-zinc-800/30"
                 >
-                    <div class="mb-1.5 flex items-center gap-2.5">
+                    <div class="mb-1.5 flex min-w-0 items-center gap-2 sm:gap-2.5">
                         <span
                             class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold"
                             :class="RANK_CHIP[src.rank - 1] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'"
                         >
                             {{ src.rank }}
                         </span>
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">
+                        <div class="min-w-0 flex-1 overflow-hidden">
+                            <div class="flex min-w-0 items-center justify-between gap-2">
+                                <span class="min-w-0 break-all text-xs font-medium leading-snug text-zinc-800 dark:text-zinc-200 sm:truncate">
                                     {{ src.source }} / {{ src.medium }}
                                 </span>
                                 <span class="shrink-0 text-xs font-bold tabular-nums text-zinc-900 dark:text-white">

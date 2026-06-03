@@ -64,7 +64,7 @@ async function handleSavePeriod(amount) {
 </script>
 
 <template>
-    <div class="relative w-full">
+    <div class="relative w-full min-w-0 max-w-full overflow-x-hidden">
         <Transition
             enter-active-class="transition-opacity duration-300 ease-out"
             enter-from-class="opacity-0"
@@ -76,7 +76,7 @@ async function handleSavePeriod(amount) {
             <TrackingPanel
                 v-if="isOpen"
                 key="tracking"
-                class="relative z-10 w-full"
+                class="relative z-10 w-full min-w-0 max-w-full"
                 :data="data"
                 :loading="loading"
                 :error="error"

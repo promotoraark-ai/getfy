@@ -31,7 +31,7 @@ const emit = defineEmits([
 </script>
 
 <template>
-    <div class="space-y-6">
+    <div class="min-w-0 max-w-full space-y-6 overflow-x-hidden">
         <div class="relative overflow-hidden rounded-2xl border border-[var(--color-primary)]/15 bg-gradient-to-r from-[var(--color-primary)]/5 via-transparent to-transparent p-3 sm:p-5 dark:from-[var(--color-primary)]/10">
             <div class="flex flex-col-reverse gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-x-4">
                 <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
@@ -131,16 +131,17 @@ const emit = defineEmits([
                 <TrackingFunnel :funnel="data.funnel" />
             </div>
 
-            <div class="grid gap-4 lg:grid-cols-3">
+            <div class="grid min-w-0 gap-4 lg:grid-cols-3">
                 <TrackingRecentSales
-                    class="lg:col-span-1"
+                    class="min-w-0 lg:col-span-1"
                     :sales="data.recent_sales"
                     :values-visible="valuesVisible"
                 />
-                <div class="space-y-4 lg:col-span-2">
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <TrackingUtmSources :sources="data.utm_sources" />
+                <div class="min-w-0 space-y-4 lg:col-span-2">
+                    <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                        <TrackingUtmSources class="min-w-0" :sources="data.utm_sources" />
                         <TrackingRevenueChart
+                            class="min-w-0"
                             :chart="data.chart_revenue"
                             :period="period"
                             :values-visible="valuesVisible"

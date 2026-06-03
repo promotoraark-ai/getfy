@@ -33,8 +33,25 @@ const chartSeries = computed(() => [{
     data: props.valuesVisible ? props.chart.map((d) => d.total) : props.chart.map(() => 0),
 }]);
 
+function compactBrl(value) {
+    const n = Number(value) || 0;
+    if (n >= 1_000_000) {
+        return `R$ ${(n / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`;
+    }
+    if (n >= 10_000) {
+        return `R$ ${(n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} mil`;
+    }
+    return formatBRL(n);
+}
+
 const chartOptions = computed(() => ({
-    chart: { type: 'area', toolbar: { show: false }, fontFamily: 'inherit', sparkline: { enabled: false } },
+    chart: {
+        type: 'area',
+        toolbar: { show: false },
+        fontFamily: 'inherit',
+        sparkline: { enabled: false },
+        redrawOnParentResize: true,
+    },
     colors: [chartPrimaryColor.value],
     stroke: { curve: 'smooth', width: 2.5 },
     fill: {
@@ -59,14 +76,15 @@ const chartOptions = computed(() => ({
     },
     yaxis: {
         labels: {
-            formatter: (v) => formatBRL(v),
-            style: { colors: '#71717a', fontSize: '11px' },
+            formatter: (v) => compactBrl(v),
+            style: { colors: '#71717a', fontSize: '10px' },
+            maxWidth: 64,
         },
     },
     grid: {
         borderColor: isDarkMode.value ? '#27272a' : '#e4e4e7',
         strokeDashArray: 4,
-        padding: { top: 4, right: 8, bottom: 0, left: 8 },
+        padding: { top: 4, right: 4, bottom: 0, left: 0 },
     },
     tooltip: {
         theme: isDarkMode.value ? 'dark' : 'light',
@@ -82,10 +100,10 @@ function displayTotal() {
 </script>
 
 <template>
-    <div class="panel-card-md">
-        <div class="flex flex-wrap items-start justify-between gap-3">
+    <div class="panel-card-md min-w-0 max-w-full overflow-hidden">
+        <div class="flex min-w-0 flex-wrap items-start justify-between gap-3">
             <div>
-                <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
+                <h2 class="flex min-w-0 flex-wrap items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <div class="dash-metric-icon-sm">
                         <LineChart class="h-4 w-4" />
                     </div>
@@ -97,14 +115,16 @@ function displayTotal() {
             </div>
         </div>
 
-        <div class="mt-4 min-h-[220px] rounded-xl border border-zinc-200/50 bg-gradient-to-b from-zinc-50/50 to-transparent p-2 dark:border-zinc-700/40 dark:from-zinc-800/30">
-            <VueApexCharts
-                v-if="chart.length"
-                type="area"
-                height="220"
-                :options="chartOptions"
-                :series="chartSeries"
-            />
+        <div class="mt-4 min-h-[220px] min-w-0 w-full max-w-full overflow-hidden rounded-xl border border-zinc-200/50 bg-gradient-to-b from-zinc-50/50 to-transparent p-1 sm:p-2 dark:border-zinc-700/40 dark:from-zinc-800/30">
+            <div v-if="chart.length" class="min-w-0 w-full max-w-full overflow-hidden">
+                <VueApexCharts
+                    type="area"
+                    height="220"
+                    width="100%"
+                    :options="chartOptions"
+                    :series="chartSeries"
+                />
+            </div>
             <p v-else class="flex h-[220px] items-center justify-center text-sm text-zinc-500">
                 Sem dados de receita no período
             </p>
