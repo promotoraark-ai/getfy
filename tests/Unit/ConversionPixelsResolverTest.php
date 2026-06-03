@@ -333,4 +333,197 @@ class ConversionPixelsResolverTest extends TestCase
         $this->assertSame('migrate-token', $resolved['meta']['entries'][0]['access_token']);
         $this->assertFalse($resolved['meta']['entries'][0]['fire_purchase_on_pix']);
     }
+
+    public function test_checkout_resolves_pivot_linked_integration(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct();
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_META,
+            'name' => 'Meta checkout pivot',
+            'config' => ['pixel_id' => 'checkout-pivot-pixel'],
+            'access_token' => 'checkout-pivot-token',
+            'is_active' => true,
+        ]);
+        $integration->products()->sync([(string) $product->id]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertTrue($checkout['meta']['enabled']);
+        $this->assertSame('checkout-pivot-pixel', $checkout['meta']['entries'][0]['pixel_id']);
+        $this->assertSame('checkout-pivot-token', $checkout['meta']['entries'][0]['access_token']);
+    }
+
+    public function test_checkout_resolves_post_migration_product_with_empty_inline_entries(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct([
+            'conversion_pixels' => [
+                'meta' => [
+                    'enabled' => true,
+                    'entries' => [],
+                    'integration_ids' => [],
+                ],
+                'tiktok' => ['enabled' => false, 'entries' => []],
+                'google_ads' => ['enabled' => false, 'entries' => []],
+                'google_analytics' => ['enabled' => false, 'entries' => []],
+                'custom_script' => [],
+            ],
+        ]);
+
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_META,
+            'name' => 'Meta migrado',
+            'config' => ['pixel_id' => 'migrated-pixel-id'],
+            'access_token' => 'migrated-token',
+            'is_active' => true,
+        ]);
+        $integration->products()->sync([(string) $product->id]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertTrue($checkout['meta']['enabled']);
+        $this->assertCount(1, $checkout['meta']['entries']);
+        $this->assertSame('migrated-pixel-id', $checkout['meta']['entries'][0]['pixel_id']);
+    }
+
+    public function test_checkout_resolves_integration_ids_on_product(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct([
+            'conversion_pixels' => [
+                'meta' => [
+                    'enabled' => true,
+                    'entries' => [],
+                    'integration_ids' => [],
+                ],
+                'tiktok' => ['enabled' => false, 'entries' => []],
+                'google_ads' => ['enabled' => false, 'entries' => []],
+                'google_analytics' => ['enabled' => false, 'entries' => []],
+                'custom_script' => [],
+            ],
+        ]);
+
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_META,
+            'name' => 'Meta via integration_ids',
+            'config' => ['pixel_id' => 'ids-pixel'],
+            'access_token' => 'ids-token',
+            'is_active' => true,
+        ]);
+
+        $product->update([
+            'conversion_pixels' => array_merge(
+                app(ConversionPixelsResolver::class)->storedConversionPixels($product->fresh()),
+                [
+                    'meta' => [
+                        'enabled' => true,
+                        'entries' => [],
+                        'integration_ids' => [$integration->id],
+                    ],
+                ]
+            ),
+        ]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertSame('ids-pixel', $checkout['meta']['entries'][0]['pixel_id']);
+    }
+
+    public function test_checkout_resolves_pivot_linked_google_ads_integration(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct([
+            'conversion_pixels' => [
+                'meta' => ['enabled' => false, 'entries' => []],
+                'tiktok' => ['enabled' => false, 'entries' => []],
+                'google_ads' => ['enabled' => true, 'entries' => [], 'integration_ids' => []],
+                'google_analytics' => ['enabled' => false, 'entries' => []],
+                'custom_script' => [],
+            ],
+        ]);
+
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_GOOGLE_ADS,
+            'name' => 'Google Ads checkout',
+            'config' => [
+                'conversion_id' => 'AW-123456789',
+                'conversion_label' => 'AbCdEfGh',
+            ],
+            'is_active' => true,
+        ]);
+        $integration->products()->sync([(string) $product->id]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertTrue($checkout['google_ads']['enabled']);
+        $this->assertSame('AW-123456789', $checkout['google_ads']['entries'][0]['conversion_id']);
+        $this->assertSame('AbCdEfGh', $checkout['google_ads']['entries'][0]['conversion_label']);
+    }
+
+    public function test_checkout_resolves_pivot_linked_google_analytics_integration(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct([
+            'conversion_pixels' => [
+                'meta' => ['enabled' => false, 'entries' => []],
+                'tiktok' => ['enabled' => false, 'entries' => []],
+                'google_ads' => ['enabled' => false, 'entries' => []],
+                'google_analytics' => ['enabled' => true, 'entries' => [], 'integration_ids' => []],
+                'custom_script' => [],
+            ],
+        ]);
+
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_GOOGLE_ANALYTICS,
+            'name' => 'GA4 checkout',
+            'config' => ['measurement_id' => 'G-ABCDEF123'],
+            'is_active' => true,
+        ]);
+        $integration->products()->sync([(string) $product->id]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertTrue($checkout['google_analytics']['enabled']);
+        $this->assertSame('G-ABCDEF123', $checkout['google_analytics']['entries'][0]['measurement_id']);
+    }
+
+    public function test_checkout_resolves_pivot_linked_tiktok_integration(): void
+    {
+        $this->withoutMiddleware(EnsureInstalled::class);
+
+        $product = $this->createTestProduct([
+            'conversion_pixels' => [
+                'meta' => ['enabled' => false, 'entries' => []],
+                'tiktok' => ['enabled' => true, 'entries' => [], 'integration_ids' => []],
+                'google_ads' => ['enabled' => false, 'entries' => []],
+                'google_analytics' => ['enabled' => false, 'entries' => []],
+                'custom_script' => [],
+            ],
+        ]);
+
+        $integration = ConversionPixelIntegration::create([
+            'tenant_id' => $product->tenant_id,
+            'platform' => ConversionPixelIntegration::PLATFORM_TIKTOK,
+            'name' => 'TikTok checkout',
+            'config' => ['pixel_id' => 'TIKTOKPIXEL99'],
+            'is_active' => true,
+        ]);
+        $integration->products()->sync([(string) $product->id]);
+
+        $checkout = \App\Support\AffiliateAttribution::conversionPixelsForCheckout($product->fresh(), null);
+
+        $this->assertTrue($checkout['tiktok']['enabled']);
+        $this->assertSame('TIKTOKPIXEL99', $checkout['tiktok']['entries'][0]['pixel_id']);
+    }
 }

@@ -141,9 +141,7 @@ class AffiliateAttribution
      */
     public static function conversionPixelsForCheckout(Product $product, ?string $affiliateCode): array
     {
-        $raw = self::conversionPixelsForCheckoutRaw($product, $affiliateCode);
-
-        return app(ConversionPixelsResolver::class)->resolveFromStoredArray($raw, $product->tenant_id);
+        return app(ConversionPixelsResolver::class)->resolveForCheckout($product, $affiliateCode);
     }
 
     public static function affiliateCodeFromOrderMetadata(?array $metadata): ?string

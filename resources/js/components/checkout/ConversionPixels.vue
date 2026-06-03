@@ -24,6 +24,7 @@ const gtagConfiguredIds = new Set();
 const metaInitedPixelIds = new Set();
 const tiktokLoadedPixelIds = new Set();
 let pageViewPushed = false;
+let metaPageViewFired = false;
 
 /** Permite apenas IDs alfanuméricos, hífen e underscore para evitar XSS. */
 function isValidPixelId(id) {
@@ -53,50 +54,74 @@ function isValidGtmId(id) {
 
 function getMetaEntries(p) {
     const m = p?.meta;
-    if (!m?.enabled) return [];
+    if (!m) return [];
     if (Array.isArray(m.entries)) {
-        return m.entries.filter((e) => e && isValidPixelId(String(e.pixel_id || '').trim()));
+        const valid = m.entries.filter((e) => e && isValidPixelId(String(e.pixel_id || '').trim()));
+        if (valid.length) return valid;
     }
+    if (!m.enabled) return [];
     if (m.pixel_id && isValidPixelId(String(m.pixel_id).trim())) {
         return [m];
     }
     return [];
+}
+
+function hasMetaEntries(p) {
+    return getMetaEntries(p).length > 0;
 }
 
 function getTiktokEntries(p) {
     const m = p?.tiktok;
-    if (!m?.enabled) return [];
+    if (!m) return [];
     if (Array.isArray(m.entries)) {
-        return m.entries.filter((e) => e && isValidPixelId(String(e.pixel_id || '').trim()));
+        const valid = m.entries.filter((e) => e && isValidPixelId(String(e.pixel_id || '').trim()));
+        if (valid.length) return valid;
     }
+    if (!m.enabled) return [];
     if (m.pixel_id && isValidPixelId(String(m.pixel_id).trim())) {
         return [m];
     }
     return [];
 }
 
+function hasTiktokEntries(p) {
+    return getTiktokEntries(p).length > 0;
+}
+
 function getGoogleAdsEntries(p) {
     const m = p?.google_ads;
-    if (!m?.enabled) return [];
+    if (!m) return [];
     if (Array.isArray(m.entries)) {
-        return m.entries.filter((e) => e && isValidPixelId(String(e.conversion_id || '').trim()));
+        const valid = m.entries.filter((e) => e && isValidPixelId(String(e.conversion_id || '').trim()));
+        if (valid.length) return valid;
     }
+    if (!m.enabled) return [];
     if (m.conversion_id && isValidPixelId(String(m.conversion_id).trim())) {
         return [m];
     }
     return [];
 }
 
+function hasGoogleAdsEntries(p) {
+    return getGoogleAdsEntries(p).length > 0;
+}
+
 function getGaEntries(p) {
     const m = p?.google_analytics;
-    if (!m?.enabled) return [];
+    if (!m) return [];
     if (Array.isArray(m.entries)) {
-        return m.entries.filter((e) => e && isValidPixelId(String(e.measurement_id || '').trim()));
+        const valid = m.entries.filter((e) => e && isValidPixelId(String(e.measurement_id || '').trim()));
+        if (valid.length) return valid;
     }
+    if (!m.enabled) return [];
     if (m.measurement_id && isValidPixelId(String(m.measurement_id).trim())) {
         return [m];
     }
     return [];
+}
+
+function hasGaEntries(p) {
+    return getGaEntries(p).length > 0;
 }
 
 const META_FBEvents_URL = 'https://connect.facebook.net/en_US/fbevents.js';
@@ -154,7 +179,6 @@ function injectMetaLibAndInit(metaEntries) {
                 metaInitedPixelIds.add(id);
             }
         });
-        window.fbq('track', 'PageView');
     };
 
     /** Pixel já hidratado pelo script (não é só o stub com loaded === false). */
@@ -279,6 +303,7 @@ function setupGtag(pixels) {
     const allIds = [...adIds, ...gaIds];
     if (!allIds.length) return;
 
+    const gtmActive = !!getGtmContainerId(pixels);
     const first = allIds[0];
 
     if (!gtagExternalScriptInserted) {
@@ -295,7 +320,9 @@ function setupGtag(pixels) {
 
     allIds.forEach((id) => {
         if (!gtagConfiguredIds.has(id)) {
-            window.gtag('config', id);
+            const isGa4 = gaIds.includes(id);
+            const configOpts = isGa4 && gtmActive ? { send_page_view: false } : {};
+            window.gtag('config', id, configOpts);
             gtagConfiguredIds.add(id);
         }
     });
@@ -353,6 +380,7 @@ function init() {
     if (fp === lastPixelsFingerprint) return;
     lastPixelsFingerprint = fp;
     pageViewPushed = false;
+    metaPageViewFired = false;
 
     metaInitedPixelIds.clear();
     tiktokLoadedPixelIds.clear();
@@ -435,7 +463,122 @@ function normalizePurchaseContents(raw) {
         }));
 }
 
+function metaCheckoutPayloadFromExtras(num, cur, extras = {}) {
+    const payload = {
+        value: num,
+        currency: cur,
+        ...(extras && typeof extras === 'object' ? extras : {}),
+    };
+    const items = Array.isArray(extras?.items) ? extras.items : [];
+    const contents = items
+        .filter((i) => i && String(i.item_id ?? i.id ?? '').trim() !== '')
+        .map((i) => ({
+            id: String(i.item_id ?? i.id).trim(),
+            quantity: Math.max(1, parseInt(i.quantity, 10) || 1),
+            item_price: Math.round((Number(i.price ?? i.item_price) || 0) * 100) / 100,
+        }));
+    if (contents.length) {
+        payload.contents = contents;
+        payload.content_ids = contents.map((c) => c.id);
+        payload.num_items = contents.reduce((s, c) => s + c.quantity, 0);
+    }
+    return payload;
+}
+
+function trackMetaPageView() {
+    if (metaPageViewFired) return;
+    const p = props.pixels || {};
+    if (!hasMetaEntries(p) || typeof window.fbq !== 'function') return;
+    metaPageViewFired = true;
+    window.fbq('track', 'PageView');
+}
+
+function trackMetaInitiateCheckout(num, cur, extras = {}) {
+    const p = props.pixels || {};
+    if (!hasMetaEntries(p) || typeof window.fbq !== 'function') return;
+    const payload = metaCheckoutPayloadFromExtras(num, cur, extras);
+    getMetaEntries(p).forEach((entry) => {
+        if (!entry.pixel_id) return;
+        window.fbq('track', 'InitiateCheckout', payload);
+    });
+}
+
+function buildGaItems(extras = {}) {
+    const items = Array.isArray(extras?.items) ? extras.items : [];
+    return items
+        .filter((i) => i && String(i.item_id ?? i.id ?? '').trim() !== '')
+        .map((i) => ({
+            item_id: String(i.item_id ?? i.id).trim(),
+            item_name: String(i.item_name ?? i.name ?? '').trim() || undefined,
+            price: Math.round((Number(i.price ?? i.item_price) || 0) * 100) / 100,
+            quantity: Math.max(1, parseInt(i.quantity, 10) || 1),
+        }));
+}
+
+function trackGaViewItem(num, cur, extras = {}) {
+    const p = props.pixels || {};
+    const entries = getGaEntries(p);
+    if (!entries.length || typeof window.gtag !== 'function') return;
+    const items = buildGaItems(extras);
+    const payload = {
+        currency: cur,
+        value: num,
+        ...(items.length ? { items } : {}),
+    };
+    entries.forEach((entry) => {
+        const mid = String(entry.measurement_id ?? '').trim();
+        if (!mid) return;
+        window.gtag(
+            'event',
+            'view_item',
+            entries.length > 1 ? { ...payload, send_to: mid } : payload,
+        );
+    });
+}
+
+function trackGaBeginCheckout(num, cur, extras = {}) {
+    const p = props.pixels || {};
+    const entries = getGaEntries(p);
+    if (!entries.length || typeof window.gtag !== 'function') return;
+    const items = buildGaItems(extras);
+    const payload = {
+        currency: cur,
+        value: num,
+        ...(items.length ? { items } : {}),
+    };
+    entries.forEach((entry) => {
+        const mid = String(entry.measurement_id ?? '').trim();
+        if (!mid) return;
+        window.gtag(
+            'event',
+            'begin_checkout',
+            entries.length > 1 ? { ...payload, send_to: mid } : payload,
+        );
+    });
+}
+
+function trackTiktokInitiateCheckout(num, cur, extras = {}) {
+    const p = props.pixels || {};
+    if (!hasTiktokEntries(p) || typeof window.ttq?.track !== 'function') return;
+    const items = buildGaItems(extras);
+    const contentId = items[0]?.item_id ?? '';
+    const payload = {
+        value: num,
+        currency: cur,
+        ...(contentId ? { content_id: contentId } : {}),
+    };
+    getTiktokEntries(p).forEach(() => {
+        window.ttq.track('InitiateCheckout', payload);
+    });
+}
+
 defineExpose({
+    hasMetaEntries() {
+        return hasMetaEntries(props.pixels || {});
+    },
+    isMetaReady() {
+        return typeof window !== 'undefined' && typeof window.fbq === 'function';
+    },
     firePageView(value = 0, currency = 'BRL', extras = {}) {
         if (pageViewPushed) return;
         pageViewPushed = true;
@@ -448,6 +591,8 @@ defineExpose({
             ...trackingExtras(),
             ...(extras && typeof extras === 'object' ? extras : {}),
         });
+        trackMetaPageView();
+        trackGaViewItem(num, cur, extras);
     },
     firePaymentGenerated(paymentMethod, value, currency = 'BRL', orderId = '', extras = {}) {
         const num = Number(value) || 0;
@@ -462,14 +607,8 @@ defineExpose({
         });
     },
     fireInitiateCheckout(value, currency = 'BRL', extras = {}) {
-        const p = props.pixels || {};
         const num = Number(value) || 0;
         const cur = typeof currency === 'string' && currency.trim() ? currency.trim().toUpperCase() : 'BRL';
-        const payload = {
-            value: num,
-            currency: cur,
-            ...(extras && typeof extras === 'object' ? extras : {}),
-        };
 
         pushBeginCheckout({
             value: num,
@@ -478,12 +617,9 @@ defineExpose({
             ...trackingExtras(),
         });
 
-        if (p.meta?.enabled && window.fbq) {
-            getMetaEntries(p).forEach((entry) => {
-                if (!entry.pixel_id) return;
-                window.fbq('track', 'InitiateCheckout', payload);
-            });
-        }
+        trackMetaInitiateCheckout(num, cur, extras);
+        trackGaBeginCheckout(num, cur, extras);
+        trackTiktokInitiateCheckout(num, cur, extras);
     },
     firePurchase(value, currency = 'BRL', orderId = '', isOrderBump = false, triggerType = 'approved', extra = {}) {
         const p = props.pixels || {};
@@ -497,7 +633,7 @@ defineExpose({
                   ? `getfy_purchase_${orderId}`
                   : '';
 
-        if (p.meta?.enabled && window.fbq) {
+        if (hasMetaEntries(p) && window.fbq) {
             getMetaEntries(p).forEach((entry) => {
                 if (!entry.pixel_id || !shouldFireForEntry(entry, triggerType, isOrderBump)) return;
                 let entryContents = contents;
@@ -531,7 +667,7 @@ defineExpose({
                 window.fbq('track', 'Purchase', payload, opts);
             });
         }
-        if (p.tiktok?.enabled && window.ttq?.track) {
+        if (hasTiktokEntries(p) && window.ttq?.track) {
             getTiktokEntries(p).forEach((entry) => {
                 if (!entry.pixel_id || !shouldFireForEntry(entry, triggerType, isOrderBump)) return;
                 const ttContents = entry.disable_order_bump_events && contents.length > 1 ? contents.slice(0, 1) : contents;
@@ -539,7 +675,7 @@ defineExpose({
                 window.ttq.track('CompletePayment', { value: num, currency: cur, content_id: ttId });
             });
         }
-        if (p.google_ads?.enabled && window.gtag) {
+        if (hasGoogleAdsEntries(p) && window.gtag) {
             getGoogleAdsEntries(p).forEach((entry) => {
                 if (!entry.conversion_id || !shouldFireForEntry(entry, triggerType, isOrderBump)) return;
                 const sendTo = `${String(entry.conversion_id).trim()}/${String(entry.conversion_label || '').trim()}`.replace(/\/+$/, '');
@@ -551,15 +687,22 @@ defineExpose({
                 });
             });
         }
-        if (p.google_analytics?.enabled && window.gtag) {
+        if (hasGaEntries(p) && window.gtag) {
+            const gaItems = mapContentsToDataLayerItems(contents);
             getGaEntries(p).forEach((entry) => {
                 if (!entry.measurement_id || !shouldFireForEntry(entry, triggerType, isOrderBump)) return;
-                window.gtag('event', 'purchase', {
-                    send_to: String(entry.measurement_id).trim(),
+                const mid = String(entry.measurement_id).trim();
+                const payload = {
                     value: num,
                     currency: cur,
                     transaction_id: orderId,
-                });
+                    ...(gaItems.length ? { items: gaItems } : {}),
+                };
+                window.gtag(
+                    'event',
+                    'purchase',
+                    getGaEntries(p).length > 1 ? { ...payload, send_to: mid } : payload,
+                );
             });
         }
 

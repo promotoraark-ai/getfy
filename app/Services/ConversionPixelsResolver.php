@@ -46,26 +46,27 @@ class ConversionPixelsResolver
     {
         $pixels = AffiliateAttribution::conversionPixelsForCheckoutRaw($product, $affiliateRef);
 
-        return $this->resolveFromStoredArray($pixels, $product->tenant_id);
+        return $this->resolveFromStoredArray($pixels, $product->tenant_id, (string) $product->id);
     }
 
     /**
      * @param  array<string, mixed>  $stored
      * @return array<string, mixed>
      */
-    public function resolveFromStoredArray(array $stored, ?int $tenantId): array
+    public function resolveFromStoredArray(array $stored, ?int $tenantId, ?string $productId = null): array
     {
         $resolved = Product::defaultConversionPixels();
 
         foreach (['meta', 'tiktok', 'google_ads', 'google_analytics'] as $platform) {
             $raw = isset($stored[$platform]) && is_array($stored[$platform]) ? $stored[$platform] : [];
-            $resolved[$platform] = $this->resolvePlatformBlock($raw, $platform, $tenantId);
+            $resolved[$platform] = $this->resolvePlatformBlock($raw, $platform, $tenantId, $productId);
         }
 
         $resolved['custom_script'] = $this->resolveCustomScripts(
             is_array($stored['custom_script'] ?? null) ? $stored['custom_script'] : [],
             $stored,
-            $tenantId
+            $tenantId,
+            $productId
         );
 
         $resolved['gtm'] = Product::normalizeGtmBlock(

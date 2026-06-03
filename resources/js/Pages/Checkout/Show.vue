@@ -16,7 +16,10 @@ import SalesNotification from '@/components/checkout/SalesNotification.vue';
 import SupportButton from '@/components/checkout/SupportButton.vue';
 import ExitPopup from '@/components/checkout/ExitPopup.vue';
 import ConversionPixels from '@/components/checkout/ConversionPixels.vue';
-import { firePurchaseWhenReady } from '@/composables/useConversionPurchase';
+import { firePurchaseWhenReady, waitForPixelSdks } from '@/composables/useConversionPurchase';
+import {
+    pixelsNeedAnyBrowserSdk,
+} from '@/lib/pixelPlatforms';
 import {
     normalizeContentBlocks,
     normalizeContentBlocksForPreview,
@@ -498,6 +501,7 @@ const pixelTrackingContext = computed(() => ({
 
 const conversionPixelsRef = ref(null);
 let initiateCheckoutFiredForLoad = false;
+let browserPixelsFingerprintAtFire = '';
 const pixelsReady = ref(false);
 const pendingPurchase = ref(null);
 /** Evita InitiateCheckout duplicado com o mesmo valor (Meta). */
@@ -521,7 +525,59 @@ function pixelCheckoutTotal() {
     return Math.round((Number(checkoutTotalBrl.value) || 0) * 100) / 100;
 }
 
-function fireInitiateCheckoutIfNeeded() {
+function linePriceInPixelCurrency(amountBrl) {
+    const code = pixelCurrency.value;
+    const brl = Number(amountBrl) || 0;
+    if (code === 'BRL') {
+        return Math.round(brl * 100) / 100;
+    }
+    return Math.round((Number(priceInCurrency(brl)) || 0) * 100) / 100;
+}
+
+function pixelCheckoutItems() {
+    const items = [];
+    const mainId = String(props.product?.id ?? props.product?.checkout_slug ?? '').trim();
+    const mainName = String(props.product?.name ?? '').trim();
+    const mainPrice = linePriceInPixelCurrency(mainLinePriceBrl.value);
+    if (mainId) {
+        items.push({
+            item_id: mainId,
+            item_name: mainName || undefined,
+            price: mainPrice,
+            quantity: 1,
+        });
+    }
+    selectedOrderBumpsList.value.forEach((b) => {
+        const id = String(b.target_product_id ?? b.id ?? '').trim();
+        if (!id) return;
+        items.push({
+            item_id: id,
+            item_name: String(b.title ?? b.target_name ?? '').trim() || undefined,
+            price: linePriceInPixelCurrency(Number(b.amount_brl) || 0),
+            quantity: 1,
+        });
+    });
+    return items;
+}
+
+function browserPixelsFingerprint(pixels) {
+    try {
+        return JSON.stringify({
+            meta: (pixels?.meta?.entries ?? []).length,
+            google_ads: (pixels?.google_ads?.entries ?? []).length,
+            google_analytics: (pixels?.google_analytics?.entries ?? []).length,
+            tiktok: (pixels?.tiktok?.entries ?? []).length,
+        });
+    } catch {
+        return '';
+    }
+}
+
+function pixelEventExtras() {
+    return { items: pixelCheckoutItems() };
+}
+
+async function fireInitiateCheckoutIfNeeded() {
     const api = conversionPixelsRef.value;
     if (!pixelsReady.value || !api?.fireInitiateCheckout) return;
     const total = pixelCheckoutTotal();
@@ -532,8 +588,28 @@ function fireInitiateCheckoutIfNeeded() {
     ) {
         return;
     }
+    if (pixelsNeedAnyBrowserSdk(conversionPixels.value)) {
+        await waitForPixelSdks(conversionPixels.value, 5000);
+    }
     lastInitiateCheckoutTotal = total;
-    api.fireInitiateCheckout(total, pixelCurrency.value);
+    api.fireInitiateCheckout(total, pixelCurrency.value, pixelEventExtras());
+}
+
+async function tryFireInitiateCheckoutOnReady(force = false) {
+    const fp = browserPixelsFingerprint(conversionPixels.value);
+    const hasBrowserSdk = pixelsNeedAnyBrowserSdk(conversionPixels.value);
+    if (!force && initiateCheckoutFiredForLoad && (!hasBrowserSdk || fp === browserPixelsFingerprintAtFire)) {
+        return;
+    }
+    if (!pixelsReady.value) return;
+    const api = conversionPixelsRef.value;
+    if (!api?.fireInitiateCheckout) return;
+    initiateCheckoutFiredForLoad = true;
+    browserPixelsFingerprintAtFire = fp;
+    if (!force) {
+        lastInitiateCheckoutTotal = null;
+    }
+    await fireInitiateCheckoutIfNeeded();
 }
 
 async function tryFirePendingPurchase() {
@@ -556,18 +632,25 @@ function onConversionPixelsReady() {
     pixelsReady.value = true;
     const api = conversionPixelsRef.value;
     if (api?.firePageView) {
-        api.firePageView(pixelCheckoutTotal(), pixelCurrency.value);
+        api.firePageView(pixelCheckoutTotal(), pixelCurrency.value, pixelEventExtras());
     }
     if (pendingPurchase.value) {
         tryFirePendingPurchase();
     }
-    if (initiateCheckoutFiredForLoad) return;
-    if (!api?.fireInitiateCheckout) return;
-    initiateCheckoutFiredForLoad = true;
-    lastInitiateCheckoutTotal = null;
-    fireInitiateCheckoutIfNeeded();
+    tryFireInitiateCheckoutOnReady();
     tryFirePendingPurchase();
 }
+
+watch(
+    () => browserPixelsFingerprint(conversionPixels.value),
+    (fp) => {
+        if (!pixelsReady.value) return;
+        if (!pixelsNeedAnyBrowserSdk(conversionPixels.value)) return;
+        if (fp === browserPixelsFingerprintAtFire) return;
+        lastInitiateCheckoutTotal = null;
+        tryFireInitiateCheckoutOnReady(true);
+    },
+);
 
 watch([checkoutTotalBrl, checkoutTotalInCurrency, pixelCurrency], () => {
     if (!initiateCheckoutFiredForLoad || !pixelsReady.value) return;
