@@ -73,6 +73,24 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="antialiased">
+    @if($isMemberArea)
+    <style>
+        #app:empty { min-height: 100vh; background: #18181b; }
+        #app:empty::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            margin: auto;
+            width: 2.5rem;
+            height: 2.5rem;
+            border: 3px solid rgba(255,255,255,0.15);
+            border-top-color: #0ea5e9;
+            border-radius: 50%;
+            animation: ma-boot-spin 0.75s linear infinite;
+        }
+        @keyframes ma-boot-spin { to { transform: rotate(360deg); } }
+    </style>
+    @endif
     @php
         $page = $page ?? [];
         $page['props'] = array_merge(

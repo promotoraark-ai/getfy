@@ -75,6 +75,7 @@ class MemberAreaAppController extends Controller
 
         $accessStartAt = $this->userAccessStartAt($product, $user);
         $now = now();
+        $completedLessonIds = $this->progressService->completedLessonIdSet($product, $user);
         $config = $product->member_area_config;
         $sections = $product->memberSections()->with(['modules.lessons', 'modules.relatedProduct'])->orderBy('position')->get();
         $progressPercent = $this->progressService->completionPercent($product, $user);
@@ -92,7 +93,7 @@ class MemberAreaAppController extends Controller
                 'title' => $s->title,
                 'cover_mode' => $s->cover_mode ?? 'vertical',
                 'section_type' => $s->section_type ?? 'courses',
-                'modules' => $s->modules->map(fn ($m) => $this->mapModuleForMemberArea($m, $s, $product, $user, $userProductIds, $baseUrl, $accessStartAt, $now))->values()->all(),
+                'modules' => $s->modules->map(fn ($m) => $this->mapModuleForMemberArea($m, $s, $product, $user, $userProductIds, $baseUrl, $accessStartAt, $now, $completedLessonIds))->values()->all(),
             ])->values()->all(),
             'progress_percent' => $progressPercent,
             'continue_watching' => $continueWatching,
@@ -119,6 +120,7 @@ class MemberAreaAppController extends Controller
         $user = $request->user();
         $accessStartAt = $this->userAccessStartAt($product, $user);
         $now = now();
+        $completedLessonIds = $this->progressService->completedLessonIdSet($product, $user);
         $sections = $product->memberSections()->with(['modules.lessons'])->orderBy('position')->get();
 
         return Inertia::render('MemberAreaApp/Modulos', [
@@ -128,7 +130,7 @@ class MemberAreaAppController extends Controller
                 'id' => $s->id,
                 'title' => $s->title,
                 'cover_mode' => $s->cover_mode ?? 'vertical',
-                'modules' => $s->modules->map(function (MemberModule $m) use ($accessStartAt, $now, $user) {
+                'modules' => $s->modules->map(function (MemberModule $m) use ($accessStartAt, $now, $completedLessonIds) {
                     $effective = ($m->source_member_module_id)
                         ? $this->resolveContentModuleForWrapper($m)
                         : $m;
@@ -144,7 +146,7 @@ class MemberAreaAppController extends Controller
                             'title' => $l->title,
                             'type' => $l->type,
                             'duration_seconds' => $l->duration_seconds,
-                            'is_completed' => $this->isLessonCompleted($user->id, $l->id),
+                            'is_completed' => isset($completedLessonIds[$l->id]),
                             ...$this->lessonLockPayload($l, $effective, $accessStartAt, $now),
                         ])->values()->all(),
                     ];
@@ -178,13 +180,14 @@ class MemberAreaAppController extends Controller
             return redirect()->route($this->memberAreaModulosRouteName($request), ['slug' => $slug])
                 ->with('error', $moduleLock['lock_message'] ?? 'Módulo ainda não liberado.');
         }
+        $completedLessonIds = $this->progressService->completedLessonIdSet($product, $user);
         $lessons = $effectiveModule->lessons->map(fn (MemberLesson $l) => [
             'id' => $l->id,
             'title' => $l->title,
             'type' => $l->type,
             'position' => $l->position,
             'duration_seconds' => $l->duration_seconds,
-            'is_completed' => $this->isLessonCompleted($user->id, $l->id),
+            'is_completed' => isset($completedLessonIds[$l->id]),
             ...$this->lessonLockPayload($l, $effectiveModule, $accessStartAt, $now),
         ])->values()->all();
 
@@ -1418,7 +1421,10 @@ class MemberAreaAppController extends Controller
             ->first();
     }
 
-    private function mapModuleForMemberArea(MemberModule $m, MemberSection $s, Product $product, $user, array $userProductIds, string $baseUrl, Carbon $accessStartAt, Carbon $now): array
+    /**
+     * @param  array<int|string, true>  $completedLessonIds
+     */
+    private function mapModuleForMemberArea(MemberModule $m, MemberSection $s, Product $product, $user, array $userProductIds, string $baseUrl, Carbon $accessStartAt, Carbon $now, array $completedLessonIds): array
     {
         $sectionType = $s->section_type ?? 'courses';
 
@@ -1434,9 +1440,7 @@ class MemberAreaAppController extends Controller
                     'title' => $l->title,
                     'type' => $l->type,
                     'duration_seconds' => $l->duration_seconds,
-                    'is_completed' => $this->progressService->completedLessonsCount($product, $user) > 0
-                        ? $this->isLessonCompleted($user->id, $l->id)
-                        : false,
+                    'is_completed' => isset($completedLessonIds[$l->id]),
                     ...$this->lessonLockPayload($l, $m, $accessStartAt, $now),
                 ])->values()->all(),
             ];

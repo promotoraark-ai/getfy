@@ -472,24 +472,31 @@ onMounted(() => {
         }, promptDelayMs);
     }
     if (scope && typeof navigator !== 'undefined' && navigator.serviceWorker) {
-        navigator.serviceWorker.register(`${scope}sw.js`, { scope }).then(async (reg) => {
-            attachServiceWorkerPushListeners(reg, () => {
-                runMemberEnsurePush({ forceRenew: true }).catch(() => {});
-            });
-            if (reg.pushManager && canRegisterPush.value) {
-                try {
-                    const ok = await runMemberEnsurePush();
-                    if (ok) {
-                        return;
+        const registerMemberSw = () => {
+            navigator.serviceWorker.register(`${scope}sw.js`, { scope }).then(async (reg) => {
+                attachServiceWorkerPushListeners(reg, () => {
+                    runMemberEnsurePush({ forceRenew: true }).catch(() => {});
+                });
+                if (reg.pushManager && canRegisterPush.value) {
+                    try {
+                        const ok = await runMemberEnsurePush();
+                        if (ok) {
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('MemberArea push sync failed (onMounted):', e);
                     }
-                } catch (e) {
-                    console.warn('MemberArea push sync failed (onMounted):', e);
                 }
-            }
-            schedulePushPrompt();
-        }).catch(() => {
-            schedulePushPrompt();
-        });
+                schedulePushPrompt();
+            }).catch(() => {
+                schedulePushPrompt();
+            });
+        };
+        if (typeof requestIdleCallback === 'function') {
+            requestIdleCallback(registerMemberSw, { timeout: 3000 });
+        } else {
+            setTimeout(registerMemberSw, 0);
+        }
     }
 });
 

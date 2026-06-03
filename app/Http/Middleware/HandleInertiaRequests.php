@@ -48,6 +48,12 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $tenantId = $user?->tenant_id;
 
+        $path = $request->path();
+        $isMemberArea = str_starts_with($path, 'm/') || $request->attributes->get('member_area_slug');
+        $isCheckout = str_starts_with($path, 'c/') || str_starts_with($path, 'checkout') || str_starts_with($path, 'api-checkout');
+        $skipPanelPwa = $isMemberArea || $isCheckout;
+        $isPanelContext = $user && $user->canAccessPanel() && ! $isMemberArea && ! $isCheckout;
+
         $appSettings = $user ? [
             'app_name' => config('getfy.app_name'),
             'theme_primary' => config('getfy.theme_primary'),
@@ -67,7 +73,7 @@ class HandleInertiaRequests extends Middleware
         $pushEnabled = false;
         $vapidPublic = null;
         $settingsPluginTabs = [];
-        if ($user && $user->canAccessPanel()) {
+        if ($isPanelContext) {
             $settingsPluginTabs = PluginRegistry::getSettingsTabs();
             $pluginNavItems = PluginRegistry::getMenuItems();
             $vapidPublic = config('getfy.pwa.vapid_public');
@@ -83,14 +89,9 @@ class HandleInertiaRequests extends Middleware
         }
 
         $notificationsUnreadCount = 0;
-        if ($user && $user->canAccessPanel()) {
+        if ($isPanelContext) {
             $notificationsUnreadCount = PanelNotification::forUser($user->id)->unread()->count();
         }
-
-        $path = $request->path();
-        $isMemberArea = str_starts_with($path, 'm/') || $request->attributes->get('member_area_slug');
-        $isCheckout = str_starts_with($path, 'c/') || str_starts_with($path, 'checkout') || str_starts_with($path, 'api-checkout');
-        $skipPanelPwa = $isMemberArea || $isCheckout;
 
         $memberNotificationsUnreadCount = 0;
         $memberPushSubscribed = false;
@@ -126,12 +127,12 @@ class HandleInertiaRequests extends Middleware
                     'avatar_url' => $user->avatar ? app(StorageService::class)->url($user->avatar) : null,
                 ] : null,
                 'uses_partner_panel' => $user ? app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user) : false,
-                'permissions' => ($user && $user->canAccessPanel())
+                'permissions' => $isPanelContext
                     ? (app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user)
                         ? app(\App\Services\PartnerAccessService::class)->permissionsFor($user)
                         : app(TeamAccessService::class)->permissionsFor($user))
                     : [],
-                'allowed_product_ids' => ($user && $user->canAccessPanel())
+                'allowed_product_ids' => $isPanelContext
                     ? (app(\App\Services\PartnerAccessService::class)->usesPartnerPanel($user)
                         ? app(\App\Services\PartnerAccessService::class)->allowedProductIdsFor($user)
                         : app(TeamAccessService::class)->allowedProductIdsFor($user))
@@ -151,7 +152,7 @@ class HandleInertiaRequests extends Middleware
             'appSettings' => $appSettings,
             'public_branding' => $publicBranding,
             'settings_plugin_tabs' => $settingsPluginTabs,
-            'plugin_ui' => ($user && $user->canAccessPanel()) || $isCheckout || $isMemberArea
+            'plugin_ui' => ($isPanelContext || $isCheckout || $isMemberArea)
                 ? PluginExtensionRegistry::inertiaPayload()
                 : ['plugins' => []],
             'plugin_member_panels' => $isMemberArea

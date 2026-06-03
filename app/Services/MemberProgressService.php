@@ -47,16 +47,42 @@ class MemberProgressService
      */
     public function completedLessonsCount(Product $product, User $user): int
     {
+        return count($this->completedLessonIdsForProduct($product, $user));
+    }
+
+    /**
+     * IDs de aulas concluídas pelo usuário no produto (host + embutidas).
+     *
+     * @return array<int, int|string>
+     */
+    public function completedLessonIdsForProduct(Product $product, User $user): array
+    {
         $ids = $this->lessonIdsForMemberAreaHost($product);
         if ($ids === []) {
-            return 0;
+            return [];
         }
 
         return MemberLessonProgress::query()
             ->forUser($user->id)
             ->whereNotNull('completed_at')
             ->whereIn('member_lesson_id', $ids)
-            ->count();
+            ->pluck('member_lesson_id')
+            ->all();
+    }
+
+    /**
+     * Set lookup: lesson_id => true (evita N+1 ao montar listagens da área de membros).
+     *
+     * @return array<int|string, true>
+     */
+    public function completedLessonIdSet(Product $product, User $user): array
+    {
+        $set = [];
+        foreach ($this->completedLessonIdsForProduct($product, $user) as $lessonId) {
+            $set[$lessonId] = true;
+        }
+
+        return $set;
     }
 
     /**

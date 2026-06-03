@@ -49,13 +49,6 @@ if (!skipPanelPwa && typeof navigator !== 'undefined' && navigator.serviceWorker
     });
 }
 
-// Vidstack Player 1.x (Web Components) – estilos e registros antes do Vue
-import 'vidstack/player/styles/default/theme.css';
-import 'vidstack/player/styles/default/layouts/audio.css';
-import 'vidstack/player/styles/default/layouts/video.css';
-import 'vidstack/player';
-import 'vidstack/player/layouts';
-import 'vidstack/player/ui';
 import { createInertiaApp, usePage } from '@inertiajs/vue3';
 import { createApp as createVueApp, h } from 'vue';
 import { watchEffect } from 'vue';

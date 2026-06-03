@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { getVideoProviderType } from '@/lib/utils';
+import { loadVidstack } from '@/lib/loadVidstack';
 
 const props = defineProps({
     src: { type: String, default: '' },
@@ -29,6 +30,7 @@ function onMobileQueryChange(e) {
     isMobile.value = !!e.matches;
 }
 const playerRef = ref(null);
+const vidstackReady = ref(false);
 let onFullscreenChangeHandler = null;
 
 async function lockOrientationLandscape() {
@@ -91,6 +93,11 @@ const watermarkText = computed(() => {
 });
 
 onMounted(() => {
+    loadVidstack()
+        .then(() => {
+            vidstackReady.value = true;
+        })
+        .catch(() => {});
     if (typeof window !== 'undefined' && 'matchMedia' in window) {
         mobileMql = window.matchMedia('(max-width: 768px)');
         isMobile.value = !!mobileMql.matches;
@@ -160,7 +167,7 @@ function onContextMenu(e) {
         @contextmenu.prevent="onContextMenu"
     >
         <media-player
-            v-if="src"
+            v-if="src && vidstackReady"
             ref="playerRef"
             class="player"
             :src="vidstackSrc"
@@ -183,6 +190,13 @@ function onContextMenu(e) {
                 </media-google-cast-button>
             </media-video-layout>
         </media-player>
+        <div
+            v-else-if="src"
+            class="flex h-full min-h-[12rem] w-full items-center justify-center bg-zinc-900 text-sm text-zinc-400"
+            aria-busy="true"
+        >
+            Carregando player…
+        </div>
         <div
             v-if="watermarkEnabled && watermarkText"
             class="watermark-overlay"
