@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Schema;
 
 class MemberLesson extends Model
 {
@@ -75,5 +76,28 @@ class MemberLesson extends Model
     public function pdfAnnotations(): HasMany
     {
         return $this->hasMany(MemberLessonPdfAnnotation::class, 'member_lesson_id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     * @return array<string, mixed>
+     */
+    public static function onlyExistingColumns(array $attributes): array
+    {
+        $table = (new static)->getTable();
+        $filtered = [];
+        static $cache = [];
+
+        foreach ($attributes as $key => $value) {
+            $cacheKey = "{$table}.{$key}";
+            if (! array_key_exists($cacheKey, $cache)) {
+                $cache[$cacheKey] = Schema::hasColumn($table, $key);
+            }
+            if ($cache[$cacheKey]) {
+                $filtered[$key] = $value;
+            }
+        }
+
+        return $filtered;
     }
 }

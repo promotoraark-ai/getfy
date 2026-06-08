@@ -19,10 +19,18 @@ return new class extends Migration
 
         Schema::table('member_lessons', function (Blueprint $table) {
             if (! Schema::hasColumn('member_lessons', 'release_after_days')) {
-                $table->unsignedInteger('release_after_days')->nullable()->after('content_files');
+                $column = $table->unsignedInteger('release_after_days')->nullable();
+                if (Schema::hasColumn('member_lessons', 'content_files')) {
+                    $column->after('content_files');
+                } elseif (Schema::hasColumn('member_lessons', 'link_title')) {
+                    $column->after('link_title');
+                }
             }
             if (! Schema::hasColumn('member_lessons', 'release_at_date')) {
-                $table->date('release_at_date')->nullable()->after('release_after_days');
+                $column = $table->date('release_at_date')->nullable();
+                if (Schema::hasColumn('member_lessons', 'release_after_days')) {
+                    $column->after('release_after_days');
+                }
             }
         });
     }

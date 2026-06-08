@@ -10,10 +10,18 @@ return new class extends Migration
     {
         Schema::table('member_lessons', function (Blueprint $table) {
             if (! Schema::hasColumn('member_lessons', 'support_files')) {
-                $table->json('support_files')->nullable()->after('content_files');
+                $column = $table->json('support_files')->nullable();
+                if (Schema::hasColumn('member_lessons', 'content_files')) {
+                    $column->after('content_files');
+                } elseif (Schema::hasColumn('member_lessons', 'link_title')) {
+                    $column->after('link_title');
+                }
             }
             if (! Schema::hasColumn('member_lessons', 'useful_links')) {
-                $table->json('useful_links')->nullable()->after('support_files');
+                $column = $table->json('useful_links')->nullable();
+                if (Schema::hasColumn('member_lessons', 'support_files')) {
+                    $column->after('support_files');
+                }
             }
         });
     }

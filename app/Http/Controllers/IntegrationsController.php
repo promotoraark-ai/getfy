@@ -20,6 +20,8 @@ use App\Plugins\PluginExtensionRegistry;
 use App\Plugins\PluginRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -110,8 +112,13 @@ class IntegrationsController extends Controller
 
         $webhookEvents = config('webhook_events.events', []);
 
+        $utmifyWith = ['products:id,name'];
+        if (Schema::hasTable('utmify_integration_api_application')) {
+            $utmifyWith[] = 'apiApplications:id,name';
+        }
+
         $utmifyIntegrations = UtmifyIntegration::forTenant($tenantId)
-            ->with('products:id,name', 'apiApplications:id,name')
+            ->with($utmifyWith)
             ->orderBy('name')
             ->get()
             ->map(fn (UtmifyIntegration $i) => [
@@ -122,8 +129,12 @@ class IntegrationsController extends Controller
                 'api_key' => $i->api_key ?? '',
                 'product_ids' => $i->products->pluck('id')->values()->all(),
                 'products' => $i->products->map(fn ($p) => ['id' => $p->id, 'name' => $p->name])->values()->all(),
-                'api_application_ids' => $i->apiApplications->pluck('id')->values()->all(),
-                'api_applications' => $i->apiApplications->map(fn ($a) => ['id' => $a->id, 'name' => $a->name])->values()->all(),
+                'api_application_ids' => $i->relationLoaded('apiApplications')
+                    ? $i->apiApplications->pluck('id')->values()->all()
+                    : [],
+                'api_applications' => $i->relationLoaded('apiApplications')
+                    ? $i->apiApplications->map(fn ($a) => ['id' => $a->id, 'name' => $a->name])->values()->all()
+                    : [],
             ])
             ->values()
             ->all();
@@ -165,27 +176,8 @@ class IntegrationsController extends Controller
         $products = Product::forTenant($tenantId)->orderBy('name')->get(['id', 'name']);
         $apiApplications = ApiApplication::forTenant($tenantId)->orderBy('name')->get(['id', 'name']);
 
-        $migrator = app(LegacyConversionPixelsMigrator::class);
-        if (! $migrator->tenantIsMigrated($tenantId) || $migrator->tenantHasLegacyInlinePixels($tenantId)) {
-            $migrator->migrateTenant($tenantId);
-        }
-
-        $conversionPixelIntegrations = ConversionPixelIntegration::forTenant($tenantId)
-            ->with('products:id,name')
-            ->orderBy('platform')
-            ->orderBy('name')
-            ->get()
-            ->map(fn (ConversionPixelIntegration $i) => ConversionPixelIntegrationController::integrationToArray($i))
-            ->values()
-            ->all();
-
-        $externalCheckoutEndpoints = InboundWebhookEndpoint::query()
-            ->forTenant($tenantId)
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (InboundWebhookEndpoint $e) => ExternalCheckoutController::serializeEndpoint($e))
-            ->values()
-            ->all();
+        $conversionPixelIntegrations = $this->loadConversionPixelIntegrations($tenantId);
+        $externalCheckoutEndpoints = $this->loadExternalCheckoutEndpoints($tenantId);
 
         return Inertia::render('Integrations/Index', [
             'gateways' => $gateways,
@@ -202,6 +194,68 @@ class IntegrationsController extends Controller
             'conversion_pixel_integrations' => $conversionPixelIntegrations,
             'external_checkout_endpoints' => $externalCheckoutEndpoints,
         ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadConversionPixelIntegrations(?int $tenantId): array
+    {
+        if (! Schema::hasTable('conversion_pixel_integrations')) {
+            return [];
+        }
+
+        try {
+            $migrator = app(LegacyConversionPixelsMigrator::class);
+            if (! $migrator->tenantIsMigrated($tenantId) || $migrator->tenantHasLegacyInlinePixels($tenantId)) {
+                $migrator->migrateTenant($tenantId);
+            }
+
+            $with = ['products:id,name'];
+
+            return ConversionPixelIntegration::forTenant($tenantId)
+                ->with($with)
+                ->orderBy('platform')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (ConversionPixelIntegration $i) => ConversionPixelIntegrationController::integrationToArray($i))
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('IntegrationsController: falha ao carregar pixels de conversão', [
+                'tenant_id' => $tenantId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function loadExternalCheckoutEndpoints(?int $tenantId): array
+    {
+        if (! Schema::hasTable('inbound_webhook_endpoints')) {
+            return [];
+        }
+
+        try {
+            return InboundWebhookEndpoint::query()
+                ->forTenant($tenantId)
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn (InboundWebhookEndpoint $e) => ExternalCheckoutController::serializeEndpoint($e))
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            Log::warning('IntegrationsController: falha ao carregar checkout externo', [
+                'tenant_id' => $tenantId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
     }
 
     /**

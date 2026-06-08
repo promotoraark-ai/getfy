@@ -28,7 +28,9 @@ use App\Services\TeamAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -1127,7 +1129,7 @@ class MemberBuilderController extends Controller
             $validated['content_url'] = $contentFiles[0]['url'];
         }
         $max = MemberLesson::where('member_module_id', $module->id)->max('position') ?? 0;
-        MemberLesson::create([
+        $attributes = MemberLesson::onlyExistingColumns([
             'member_module_id' => $module->id,
             'product_id' => $produto->id,
             'title' => $validated['title'],
@@ -1147,6 +1149,18 @@ class MemberBuilderController extends Controller
             'is_free' => $request->boolean('is_free', false),
             'watermark_enabled' => $request->boolean('watermark_enabled', false),
         ]);
+        try {
+            MemberLesson::create($attributes);
+        } catch (QueryException $e) {
+            Log::warning('member_lesson create failed', ['error' => $e->getMessage(), 'product_id' => $produto->id]);
+
+            $message = 'Não foi possível criar a aula. Execute as migrations pendentes (php artisan migrate) ou defina APP_AUTO_MIGRATE=true no .env.';
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 500);
+            }
+
+            return back()->with('error', $message);
+        }
         if ($request->expectsJson()) {
             return response()->json(['message' => 'Aula criada.']);
         }
@@ -1225,7 +1239,18 @@ class MemberBuilderController extends Controller
         if ($request->has('useful_links')) {
             $validated['useful_links'] = $usefulLinks !== [] ? $usefulLinks : null;
         }
-        $lesson->update($validated);
+        try {
+            $lesson->update(MemberLesson::onlyExistingColumns($validated));
+        } catch (QueryException $e) {
+            Log::warning('member_lesson update failed', ['error' => $e->getMessage(), 'lesson_id' => $lesson->id]);
+
+            $message = 'Não foi possível salvar a aula. Execute as migrations pendentes (php artisan migrate) ou defina APP_AUTO_MIGRATE=true no .env.';
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 500);
+            }
+
+            return back()->with('error', $message);
+        }
         if ($request->expectsJson()) {
             return response()->json(['message' => 'Aula atualizada.']);
         }
@@ -1903,7 +1928,7 @@ class MemberBuilderController extends Controller
             $position = (MemberLesson::query()->where('member_module_id', $targetModule->id)->max('position') ?? 0) + 1;
         }
 
-        return MemberLesson::create([
+        return MemberLesson::create(MemberLesson::onlyExistingColumns([
             'member_module_id' => $targetModule->id,
             'product_id' => $produto->id,
             'title' => $this->duplicateMemberTitle($source->title),
@@ -1920,7 +1945,7 @@ class MemberBuilderController extends Controller
             'duration_seconds' => $source->duration_seconds,
             'is_free' => (bool) $source->is_free,
             'watermark_enabled' => (bool) ($source->watermark_enabled ?? false),
-        ]);
+        ]));
     }
 
     /**

@@ -6,6 +6,7 @@
 
 - **Documentação da API de pagamentos**: restauradas as páginas Vue e componentes ausentes (`Docs/ApiPagamentos`, `Docs/ApiPagamentosTestar` e blocos em `components/docs/`); corrigida a **tela preta** ao abrir `/docs/api-pagamentos` (erro `Page not found: ./Pages/Docs/ApiPagamentos.vue`).
 - **Painel do afiliado / co-produtor — Financeiro**: corrigido **403 (Acesso não autorizado)** ao abrir Financeiro/Faturamento quando o parceiro tinha vínculo ativo mas role ainda era `aluno` (menu apontava para `/financeiro` do produtor); menu e middleware passam a usar `/parceiro/financeiro`; aprovação de afiliado no painel do produtor atualiza o role para `afiliado`.
+- **Integrações (`/integracoes`)**: corrigido **erro 500** após atualização quando migrations de pixels centralizados ou checkout externo ainda não tinham sido aplicadas; a página abre mesmo com banco parcialmente desatualizado (execute `php artisan migrate` ou `APP_AUTO_MIGRATE=true` para habilitar todos os recursos).
 - **Utmify / moedas internacionais**: valores enviados à Utmify passam a ser convertidos para **BRL em qualquer moeda** (USD, EUR, MZN, JPY, etc.) quando o `settlement_amount_cents` do webhook CajuPay ainda não está disponível; pedidos internacionais passam a gravar `amount_brl` estimado no metadata na criação.
 
 ### Melhorias
