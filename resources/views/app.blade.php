@@ -78,7 +78,7 @@
             : \Illuminate\Support\Facades\Vite::asset('resources/js/plugins/getfyPluginVueBridge.js');
     @endphp
     <script type="importmap">
-        {"imports":{"vue":@json($vueBridgeImport)}}
+        {"scopes":{"/plugins/":{"vue":@json($vueBridgeImport)}}}
     </script>
     @php
         $assetContext = \App\Plugins\PluginAssetQueue::contextForRequest(request());

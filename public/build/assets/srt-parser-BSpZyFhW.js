@@ -1,2 +1,0 @@
-import{V as r,a as i,b as h}from"./prod-D0hm8q24.js";import"./app-CblfVsn7.js";import"vue";import"./Toggle-niKtOEoG.js";const c=/,/g,a="-->";class n extends r{parse(s,e){if(s==="")this.c&&(this.l.push(this.c),this.h.onCue?.(this.c),this.c=null),this.e=i.None;else if(this.e===i.Cue)this.c.text+=(this.c.text?`
-`:"")+s;else if(s.includes(a)){const t=this.q(s,e);t&&(this.c=new h(t[0],t[1],t[2].join(" ")),this.c.id=this.n,this.e=i.Cue)}this.n=s}q(s,e){return super.q(s.replace(c,"."),e)}}function l(){return new n}export{n as SRTParser,l as default};

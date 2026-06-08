@@ -44,13 +44,8 @@ export default defineConfig({
     },
     build: {
         rollupOptions: {
-            external: (id, parentId) => {
-                if (id !== 'vue') {
-                    return false;
-                }
-
-                return !parentId?.includes('getfyPluginVueBridge');
-            },
+            // Vue só é externalizado no entry do bridge (plugin-ui importa "vue" via import map com scope).
+            // O painel principal deve empacotar Vue nos chunks — import map global quebrava o build-only.
             output: {
                 entryFileNames: (chunk) =>
                     chunk.name === 'getfyPluginVueBridge' ? 'getfy-plugin-vue.mjs' : 'assets/[name]-[hash].js',
