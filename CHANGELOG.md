@@ -1,12 +1,24 @@
 # Changelog
 
+## [2.0.2] - 08-06-2026
+
+### Correções
+
+- **Instalador (wizard)**: corrigido erro **"There is no active transaction"** na migration `change_products_id_to_uuid` em **hospedagem compartilhada** (MySQL/MariaDB fazem commit implícito em `ALTER TABLE` dentro de `DB::transaction()`); instalações novas usam caminho rápido com banco vazio, sem mapear IDs inteiros antigos.
+- **Member Builder**: corrigido **erro 500** ao criar, editar ou duplicar aulas quando colunas recentes de `member_lessons` ainda não existiam no banco (`support_files`, `useful_links`, `content_files`, liberação programada); gravação resiliente (`onlyExistingColumns`) e migration de reparo `ensure_member_lessons_optional_columns`.
+- **Integrações (`/integracoes`)**: corrigido **erro 500** após atualização quando migrations de pixels centralizados, checkout externo ou pivot Utmify ainda não tinham sido aplicadas; a página abre mesmo com banco parcialmente desatualizado.
+
+### Melhorias
+
+- **Instalador / migrations**: mensagens de erro mais claras no wizard quando uma migration falha (incluindo orientação para limpar o banco e reinstalar após instalação interrompida).
+- **Migrations `member_lessons`**: migrations de `release_after_days`, `support_files` e `useful_links` deixam de falhar quando `content_files` ainda não existe (comum em updates parciais).
+
 ## [2.0.1] - 08-06-2026
 
 ### Correções
 
 - **Documentação da API de pagamentos**: restauradas as páginas Vue e componentes ausentes (`Docs/ApiPagamentos`, `Docs/ApiPagamentosTestar` e blocos em `components/docs/`); corrigida a **tela preta** ao abrir `/docs/api-pagamentos` (erro `Page not found: ./Pages/Docs/ApiPagamentos.vue`).
 - **Painel do afiliado / co-produtor — Financeiro**: corrigido **403 (Acesso não autorizado)** ao abrir Financeiro/Faturamento quando o parceiro tinha vínculo ativo mas role ainda era `aluno` (menu apontava para `/financeiro` do produtor); menu e middleware passam a usar `/parceiro/financeiro`; aprovação de afiliado no painel do produtor atualiza o role para `afiliado`.
-- **Integrações (`/integracoes`)**: corrigido **erro 500** após atualização quando migrations de pixels centralizados ou checkout externo ainda não tinham sido aplicadas; a página abre mesmo com banco parcialmente desatualizado (execute `php artisan migrate` ou `APP_AUTO_MIGRATE=true` para habilitar todos os recursos).
 - **Utmify / moedas internacionais**: valores enviados à Utmify passam a ser convertidos para **BRL em qualquer moeda** (USD, EUR, MZN, JPY, etc.) quando o `settlement_amount_cents` do webhook CajuPay ainda não está disponível; pedidos internacionais passam a gravar `amount_brl` estimado no metadata na criação.
 
 ### Melhorias
