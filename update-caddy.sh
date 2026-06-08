@@ -62,6 +62,33 @@ fi
 
 cd "$INSTALL_DIR"
 
+run_frontend_build() {
+  echo "Compilando assets do frontend (npm run build)..."
+  $SUDO rm -f public/hot 2>/dev/null || true
+
+  if command -v npm >/dev/null 2>&1; then
+    $SUDO npm ci
+    $SUDO npm run build
+  else
+    echo "npm não encontrado no host; usando container Node para o build..."
+    $SUDO docker run --rm \
+      -v "$INSTALL_DIR:/app" \
+      -w /app \
+      node:22-bookworm-slim \
+      sh -ec 'npm ci && npm run build'
+  fi
+
+  if [ ! -f public/build/manifest.json ]; then
+    echo "Erro: build do frontend incompleto (public/build/manifest.json ausente)." >&2
+    exit 1
+  fi
+  if [ ! -f public/build/getfy-plugin-vue.mjs ]; then
+    echo "Erro: build do frontend incompleto (public/build/getfy-plugin-vue.mjs ausente)." >&2
+    exit 1
+  fi
+}
+
+run_frontend_build
 $SUDO env GETFY_COMPOSE_FILES="docker-compose.caddy.yml" sh docker/up.sh
 
 echo ""
