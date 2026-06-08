@@ -45,9 +45,8 @@ return new class extends Migration
             return;
         }
 
-        DB::transaction(function () {
-            $this->runUpMySQL();
-        });
+        // MySQL/MariaDB fazem commit implícito em DDL (ALTER TABLE, etc.) — não usar DB::transaction().
+        $this->runUpMySQL();
     }
 
     private function runUpMySQL(): void
@@ -57,6 +56,12 @@ return new class extends Migration
             [DB::getDatabaseName()]
         );
         if ($col && $col->DATA_TYPE === 'char' && (int) $col->CHARACTER_MAXIMUM_LENGTH === 36) {
+            return;
+        }
+
+        if ($this->isFreshProductUuidInstall()) {
+            $this->runUpMySQLEmptyDatabase();
+
             return;
         }
 
@@ -87,20 +92,7 @@ return new class extends Migration
             }
         });
 
-        foreach (array_keys(self::PRODUCT_FK_TABLES) as $table) {
-            if (! Schema::hasTable($table)) {
-                continue;
-            }
-            foreach (self::PRODUCT_FK_TABLES[$table] as $column) {
-                try {
-                    Schema::table($table, function (Blueprint $t) use ($column) {
-                        $t->dropForeign([$column]);
-                    });
-                } catch (\Throwable $e) {
-                    // FK may already have been dropped in a previous failed run
-                }
-            }
-        }
+        $this->dropProductForeignKeys();
 
         DB::statement('ALTER TABLE products MODIFY id BIGINT UNSIGNED NOT NULL');
         DB::statement('ALTER TABLE products DROP PRIMARY KEY');
@@ -138,11 +130,86 @@ return new class extends Migration
 
         Schema::drop($mappingTable);
 
+        $this->restoreProductForeignKeys();
+    }
+
+    /** Instalação nova: banco vazio, sem necessidade de mapear IDs inteiros antigos. */
+    private function isFreshProductUuidInstall(): bool
+    {
+        if (DB::table('products')->exists()) {
+            return false;
+        }
+        if (Schema::hasColumn('products', 'id_new')) {
+            return false;
+        }
+        if (Schema::hasTable('_product_uuid_mapping')) {
+            return false;
+        }
+        foreach (array_keys(self::PRODUCT_FK_TABLES) as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+            foreach (self::PRODUCT_FK_TABLES[$table] as $column) {
+                if (! Schema::hasColumn($table, $column)) {
+                    continue;
+                }
+                if (DB::table($table)->whereNotNull($column)->exists()) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private function runUpMySQLEmptyDatabase(): void
+    {
+        $this->dropProductForeignKeys();
+        DB::statement('ALTER TABLE products MODIFY id CHAR(36) NOT NULL');
         foreach (self::PRODUCT_FK_TABLES as $table => $columns) {
             if (! Schema::hasTable($table)) {
                 continue;
             }
             foreach ($columns as $column) {
+                if (! Schema::hasColumn($table, $column)) {
+                    continue;
+                }
+                $nullable = $column === 'related_product_id'
+                    || (isset(self::NULLABLE_PRODUCT_COLUMNS[$table]) && in_array($column, self::NULLABLE_PRODUCT_COLUMNS[$table], true));
+                DB::statement('ALTER TABLE `'.$table.'` MODIFY `'.$column.'` CHAR(36) '.($nullable ? 'NULL' : 'NOT NULL'));
+            }
+        }
+        $this->restoreProductForeignKeys();
+    }
+
+    private function dropProductForeignKeys(): void
+    {
+        foreach (array_keys(self::PRODUCT_FK_TABLES) as $table) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+            foreach (self::PRODUCT_FK_TABLES[$table] as $column) {
+                try {
+                    Schema::table($table, function (Blueprint $t) use ($column) {
+                        $t->dropForeign([$column]);
+                    });
+                } catch (\Throwable $e) {
+                    // FK may already have been dropped in a previous failed run
+                }
+            }
+        }
+    }
+
+    private function restoreProductForeignKeys(): void
+    {
+        foreach (self::PRODUCT_FK_TABLES as $table => $columns) {
+            if (! Schema::hasTable($table)) {
+                continue;
+            }
+            foreach ($columns as $column) {
+                if (! Schema::hasColumn($table, $column)) {
+                    continue;
+                }
                 Schema::table($table, function (Blueprint $t) use ($table, $column) {
                     $fk = $t->foreign($column)->references('id')->on('products');
                     $isNullable = $column === 'related_product_id' || (isset(self::NULLABLE_PRODUCT_COLUMNS[$table]) && in_array($column, self::NULLABLE_PRODUCT_COLUMNS[$table], true));

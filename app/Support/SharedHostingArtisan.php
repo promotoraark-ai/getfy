@@ -272,6 +272,13 @@ class SharedHostingArtisan
             return 'Pasta vendor não encontrada. Suba o projeto com vendor/ ou rode composer install antes de migrar.';
         }
 
+        if (stripos($msg, 'no active transaction') !== false) {
+            return 'Erro de transação MySQL durante migration (DDL faz commit automático). '
+                . 'Se a instalação foi interrompida aqui, apague todas as tabelas do banco e rode o wizard de novo. '
+                . 'Atualize para a versão mais recente do Getfy — essa migration já foi corrigida. '
+                . 'Detalhe: ' . $msg;
+        }
+
         return $msg;
     }
 
