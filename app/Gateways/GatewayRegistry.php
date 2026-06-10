@@ -2,101 +2,141 @@
 
 namespace App\Gateways;
 
-use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\URL;
+use App\Gateways\Contracts\GatewayDriver;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class GatewayRegistry
 {
-    /** @var array<string, array<string, mixed>> */
-    private static array $custom = [];
+    /**
+     * Registro de gateways permitidos: apenas Asaas e CajuPay.
+     * @var array<string, array<string, mixed>>
+     */
+    private static array $gateways = [];
 
     /**
-     * Register a gateway (e.g. from a plugin). Merges with core gateways from config.
-     *
-     * @param  array{slug: string, name: string, image: string, methods: array, scope: string, signup_url: string, driver: string, credential_keys: array}  $gateway
+     * Drivers instanciados.
+     * @var array<string, GatewayDriver>
      */
-    public static function register(array $gateway): void
+    private static array $drivers = [];
+
+    /**
+     * Inicializa o registro com configuração centralizada.
+     */
+    public static function boot(): void
     {
-        $slug = $gateway['slug'] ?? null;
-        if ($slug && is_string($slug)) {
-            self::$custom[$slug] = $gateway;
+        $allowedGateways = config('ark_gateways.allowed_gateways', ['asaas', 'cajupay']);
+        $gateways = config('gateways.gateways', []);
+
+        self::$gateways = [];
+
+        foreach ($allowedGateways as $slug) {
+            if (!isset($gateways[$slug])) {
+                Log::warning('GatewayRegistry: gateway '.$slug.' não encontrado em config/gateways.php');
+                continue;
+            }
+
+            $gateway = $gateways[$slug];
+            
+            // Injeta signup_url centralizada
+            if ($slug === 'asaas') {
+                $gateway['signup_url'] = config('ark_gateways.asaas.signup_url', 'https://www.asaas.com');
+            } elseif ($slug === 'cajupay') {
+                $gateway['signup_url'] = config('ark_gateways.cajupay.signup_url', 'https://cajupay.com.br');
+            }
+
+            self::$gateways[$slug] = $gateway;
         }
     }
 
     /**
-     * All available gateways (config + custom from plugins).
-     *
-     * @return array<int, array<string, mixed>>
-     */
-    public static function all(): array
-    {
-        $fromConfig = config('gateways.gateways', []);
-        $merged = array_merge($fromConfig, self::$custom);
-
-        return array_values(array_map(function ($def, $slug) {
-            $def['slug'] = $def['slug'] ?? $slug;
-            return $def;
-        }, $merged, array_keys($merged)));
-    }
-
-    /**
-     * Get a single gateway definition by slug.
-     *
+     * Obtém definição de gateway por slug.
      * @return array<string, mixed>|null
      */
     public static function get(string $slug): ?array
     {
-        foreach (self::all() as $gateway) {
-            if (($gateway['slug'] ?? '') === $slug) {
-                return $gateway;
-            }
+        if (empty(self::$gateways)) {
+            self::boot();
         }
-        return null;
+
+        if (!in_array($slug, config('ark_gateways.allowed_gateways', ['asaas', 'cajupay']), true)) {
+            Log::warning('GatewayRegistry: acesso negado ao gateway '.$slug.' (não está na whitelist)');
+            return null;
+        }
+
+        return self::$gateways[$slug] ?? null;
     }
 
     /**
-     * Get driver instance for a gateway slug.
+     * Lista todos os gateways permitidos.
+     * @return array<int, array<string, mixed>>
      */
-    public static function driver(string $slug): ?Contracts\GatewayDriver
+    public static function all(): array
     {
-        $def = self::get($slug);
-        if (!$def || empty($def['driver'])) {
-            return null;
+        if (empty(self::$gateways)) {
+            self::boot();
         }
-        $class = $def['driver'];
-        if (!is_string($class) || !class_exists($class)) {
-            return null;
-        }
-        $instance = app($class);
-        return $instance instanceof Contracts\GatewayDriver ? $instance : null;
+
+        return array_values(self::$gateways);
     }
 
     /**
-     * Resolve gateway image URL. Se a imagem for "plugin:{slug}/{path}", retorna a URL da rota de assets do plugin.
-     * Plugins podem colocar a imagem em plugins/{slug}/assets/{path} e usar image => 'plugin:slug/path'.
+     * Obtém driver instanciado para um gateway.
      */
-    public static function resolveImageUrl(?string $image): ?string
+    public static function driver(string $slug): ?GatewayDriver
     {
-        if ($image === null || $image === '') {
+        if (!in_array($slug, config('ark_gateways.allowed_gateways', ['asaas', 'cajupay']), true)) {
+            Log::warning('GatewayRegistry: driver não permitido para gateway '.$slug);
             return null;
         }
-        if (str_starts_with($image, 'plugin:')) {
-            $rest = substr($image, 7);
-            $slash = strpos($rest, '/');
-            if ($slash === false) {
-                return null;
-            }
-            $pluginSlug = substr($rest, 0, $slash);
-            $path = substr($rest, $slash + 1);
-            $path = str_replace(['../', '..\\'], '', $path);
-            if ($path === '' || preg_match('/\\.\\./', $path)) {
-                return null;
-            }
-            if (Route::has('plugins.asset')) {
-                return URL::route('plugins.asset', ['slug' => $pluginSlug, 'path' => $path]);
-            }
+
+        if (isset(self::$drivers[$slug])) {
+            return self::$drivers[$slug];
+        }
+
+        $gateway = self::get($slug);
+        if (!$gateway) {
             return null;
         }
-        return $image;
+
+        $driverClass = $gateway['driver'] ?? null;
+        if (!$driverClass || !class_exists($driverClass)) {
+            Log::error('GatewayRegistry: driver class não encontrada', ['slug' => $slug, 'class' => $driverClass]);
+            return null;
+        }
+
+        try {
+            self::$drivers[$slug] = new $driverClass();
+        } catch (\Throwable $e) {
+            Log::error('GatewayRegistry: falha ao instanciar driver', ['slug' => $slug, 'error' => $e->getMessage()]);
+            return null;
+        }
+
+        return self::$drivers[$slug];
+    }
+
+    /**
+     * Registra um novo gateway (para plugins, se necessário).
+     * Bloqueado: apenas Asaas e CajuPay são permitidos em ArkGateway.
+     */
+    public static function register(string $slug, array $definition): void
+    {
+        throw new RuntimeException('ArkGateway: registro de novos gateways não é permitido. Apenas Asaas e CajuPay.');
+    }
+
+    /**
+     * Resolve URL da imagem de um gateway.
+     */
+    public static function resolveImageUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        if (str_starts_with($path, 'http')) {
+            return $path;
+        }
+
+        return asset($path);
     }
 }
